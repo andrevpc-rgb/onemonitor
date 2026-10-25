@@ -11,6 +11,9 @@ namespace OneMonitor.Agent.Infrastructure.Persistence;
 /// </summary>
 public class SqliteActivityRepository : IActivityRepository
 {
+    private const string SelectColumns =
+        "Id, ProcessName, WindowTitle, Type, StartTime, EndTime, Justification, EventId, SyncedAt";
+
     private readonly string _connectionString;
 
     public SqliteActivityRepository(string databasePath)
@@ -38,18 +41,66 @@ public class SqliteActivityRepository : IActivityRepository
                 Type INTEGER NOT NULL,
                 StartTime TEXT NOT NULL,
                 EndTime TEXT NOT NULL,
-                Justification TEXT NULL
+                Justification TEXT NULL,
+                EventId TEXT NULL,
+                SyncedAt TEXT NULL
             );
             """;
         create.ExecuteNonQuery();
 
         // "CREATE TABLE IF NOT EXISTS" não adiciona colunas a uma tabela já existente
-        // (ex.: um banco criado na Fase 1, antes de Justification existir). Migra em caso de falta.
+        // (ex.: um banco criado em fase anterior, antes dessas colunas existirem). Migra em caso de falta.
         if (!HasColumn(connection, "ActivityRecords", "Justification"))
         {
             var alter = connection.CreateCommand();
             alter.CommandText = "ALTER TABLE ActivityRecords ADD COLUMN Justification TEXT NULL";
             alter.ExecuteNonQuery();
+        }
+
+        var eventIdColumnAdded = false;
+        if (!HasColumn(connection, "ActivityRecords", "EventId"))
+        {
+            var alter = connection.CreateCommand();
+            alter.CommandText = "ALTER TABLE ActivityRecords ADD COLUMN EventId TEXT NULL";
+            alter.ExecuteNonQuery();
+            eventIdColumnAdded = true;
+        }
+
+        if (!HasColumn(connection, "ActivityRecords", "SyncedAt"))
+        {
+            var alter = connection.CreateCommand();
+            alter.CommandText = "ALTER TABLE ActivityRecords ADD COLUMN SyncedAt TEXT NULL";
+            alter.ExecuteNonQuery();
+        }
+
+        // Linhas gravadas antes de EventId existir não têm chave de deduplicação: preenche
+        // uma vez, aqui, para que a fila de sincronização funcione também para dados antigos.
+        if (eventIdColumnAdded)
+        {
+            BackfillMissingEventIds(connection);
+        }
+    }
+
+    private static void BackfillMissingEventIds(SqliteConnection connection)
+    {
+        var select = connection.CreateCommand();
+        select.CommandText = "SELECT Id FROM ActivityRecords WHERE EventId IS NULL OR EventId = ''";
+        var idsToBackfill = new List<long>();
+        using (var reader = select.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                idsToBackfill.Add(reader.GetInt64(0));
+            }
+        }
+
+        foreach (var id in idsToBackfill)
+        {
+            var update = connection.CreateCommand();
+            update.CommandText = "UPDATE ActivityRecords SET EventId = $eventId WHERE Id = $id";
+            update.Parameters.AddWithValue("$eventId", Guid.NewGuid().ToString());
+            update.Parameters.AddWithValue("$id", id);
+            update.ExecuteNonQuery();
         }
     }
 
@@ -88,7 +139,9 @@ public class SqliteActivityRepository : IActivityRepository
         {
             id = last!.Id;
             var update = connection.CreateCommand();
-            update.CommandText = "UPDATE ActivityRecords SET EndTime = $endTime WHERE Id = $id";
+            // Reseta SyncedAt: se a linha já tinha sido sincronizada, o EndTime estendido
+            // precisa ser reenviado (o backend trata EventId como chave de upsert/dedup).
+            update.CommandText = "UPDATE ActivityRecords SET EndTime = $endTime, SyncedAt = NULL WHERE Id = $id";
             update.Parameters.AddWithValue("$endTime", record.EndTime.ToString("O"));
             update.Parameters.AddWithValue("$id", id);
             update.ExecuteNonQuery();
@@ -97,8 +150,8 @@ public class SqliteActivityRepository : IActivityRepository
         {
             var insert = connection.CreateCommand();
             insert.CommandText = """
-                INSERT INTO ActivityRecords (ProcessName, WindowTitle, Type, StartTime, EndTime, Justification)
-                VALUES ($processName, $windowTitle, $type, $startTime, $endTime, $justification)
+                INSERT INTO ActivityRecords (ProcessName, WindowTitle, Type, StartTime, EndTime, Justification, EventId)
+                VALUES ($processName, $windowTitle, $type, $startTime, $endTime, $justification, $eventId)
                 """;
             insert.Parameters.AddWithValue("$processName", record.ProcessName);
             insert.Parameters.AddWithValue("$windowTitle", record.WindowTitle);
@@ -106,6 +159,8 @@ public class SqliteActivityRepository : IActivityRepository
             insert.Parameters.AddWithValue("$startTime", record.StartTime.ToString("O"));
             insert.Parameters.AddWithValue("$endTime", record.EndTime.ToString("O"));
             insert.Parameters.AddWithValue("$justification", (object?)record.Justification ?? DBNull.Value);
+            insert.Parameters.AddWithValue("$eventId",
+                string.IsNullOrEmpty(record.EventId) ? Guid.NewGuid().ToString() : record.EventId);
             insert.ExecuteNonQuery();
 
             var lastId = connection.CreateCommand();
@@ -137,8 +192,8 @@ public class SqliteActivityRepository : IActivityRepository
     {
         using var connection = OpenConnection();
         var command = connection.CreateCommand();
-        command.CommandText = """
-            SELECT Id, ProcessName, WindowTitle, Type, StartTime, EndTime, Justification
+        command.CommandText = $"""
+            SELECT {SelectColumns}
             FROM ActivityRecords
             ORDER BY Id ASC
             """;
@@ -158,8 +213,8 @@ public class SqliteActivityRepository : IActivityRepository
 
         using var connection = OpenConnection();
         var command = connection.CreateCommand();
-        command.CommandText = """
-            SELECT Id, ProcessName, WindowTitle, Type, StartTime, EndTime, Justification
+        command.CommandText = $"""
+            SELECT {SelectColumns}
             FROM ActivityRecords
             WHERE StartTime >= $start AND StartTime < $end
             ORDER BY Id ASC
@@ -167,6 +222,44 @@ public class SqliteActivityRepository : IActivityRepository
         command.Parameters.AddWithValue("$start", start.ToString("O"));
         command.Parameters.AddWithValue("$end", end.ToString("O"));
         return ReadAll(command);
+    }
+
+    public IReadOnlyList<ActivityRecord> GetPendingSyncRecords(int maxCount)
+    {
+        using var connection = OpenConnection();
+        var command = connection.CreateCommand();
+        command.CommandText = $"""
+            SELECT {SelectColumns}
+            FROM ActivityRecords
+            WHERE SyncedAt IS NULL
+            ORDER BY Id ASC
+            LIMIT $maxCount
+            """;
+        command.Parameters.AddWithValue("$maxCount", maxCount);
+        return ReadAll(command);
+    }
+
+    public void MarkSynced(IReadOnlyList<long> recordIds, DateTimeOffset syncedAt)
+    {
+        if (recordIds.Count == 0)
+        {
+            return;
+        }
+
+        using var connection = OpenConnection();
+        using var transaction = connection.BeginTransaction();
+
+        var command = connection.CreateCommand();
+        var placeholders = string.Join(",", recordIds.Select((_, i) => $"$id{i}"));
+        command.CommandText = $"UPDATE ActivityRecords SET SyncedAt = $syncedAt WHERE Id IN ({placeholders})";
+        command.Parameters.AddWithValue("$syncedAt", syncedAt.ToString("O"));
+        for (var i = 0; i < recordIds.Count; i++)
+        {
+            command.Parameters.AddWithValue($"$id{i}", recordIds[i]);
+        }
+
+        command.ExecuteNonQuery();
+        transaction.Commit();
     }
 
     private SqliteConnection OpenConnection()
@@ -179,8 +272,8 @@ public class SqliteActivityRepository : IActivityRepository
     private static ActivityRecord? ReadLastRecord(SqliteConnection connection)
     {
         var command = connection.CreateCommand();
-        command.CommandText = """
-            SELECT Id, ProcessName, WindowTitle, Type, StartTime, EndTime, Justification
+        command.CommandText = $"""
+            SELECT {SelectColumns}
             FROM ActivityRecords
             ORDER BY Id DESC
             LIMIT 1
@@ -209,6 +302,8 @@ public class SqliteActivityRepository : IActivityRepository
         Type = (ActivityType)reader.GetInt32(3),
         StartTime = DateTimeOffset.Parse(reader.GetString(4)),
         EndTime = DateTimeOffset.Parse(reader.GetString(5)),
-        Justification = reader.IsDBNull(6) ? null : reader.GetString(6)
+        Justification = reader.IsDBNull(6) ? null : reader.GetString(6),
+        EventId = reader.IsDBNull(7) ? string.Empty : reader.GetString(7),
+        SyncedAt = reader.IsDBNull(8) ? null : DateTimeOffset.Parse(reader.GetString(8))
     };
 }

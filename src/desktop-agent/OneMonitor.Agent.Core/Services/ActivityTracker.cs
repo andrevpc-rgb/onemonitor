@@ -125,6 +125,7 @@ public class ActivityTracker
     private static ActivityRecord CreateRecord(ActivityType type, string processName, string windowTitle, DateTimeOffset now) =>
         new()
         {
+            EventId = Guid.NewGuid().ToString(),
             Type = type,
             ProcessName = processName,
             WindowTitle = windowTitle,

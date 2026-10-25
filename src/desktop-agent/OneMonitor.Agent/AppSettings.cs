@@ -23,10 +23,14 @@ public class AppSettings
 
     public string? CategoriesConfigPath { get; set; }
 
+    public SyncSettings Sync { get; set; } = new();
+
     public string ResolvedCategoriesConfigPath =>
         !string.IsNullOrWhiteSpace(CategoriesConfigPath)
             ? CategoriesConfigPath
             : Path.Combine(AppContext.BaseDirectory, "categories.json");
+
+    public string ResolvedDeviceIdFilePath => Path.Combine(ResolveDataRoot(), "device-id.txt");
 
     public string ResolvedDatabasePath =>
         !string.IsNullOrWhiteSpace(DatabasePath)
@@ -91,4 +95,25 @@ public class AppSettings
 
         return null;
     }
+}
+
+/// <summary>
+/// Configuração da sincronização com um backend. Desabilitada por padrão — não há backend
+/// nesta fase do projeto; o agente continua 100% funcional offline sem ela.
+/// </summary>
+public class SyncSettings
+{
+    public bool Enabled { get; set; }
+
+    /// <summary>URL base do backend (ex.: "https://api.onemonitor.exemplo.com/"). Precisa terminar com "/".</summary>
+    public string ApiBaseUrl { get; set; } = string.Empty;
+
+    /// <summary>Chave/token enviado no header de autenticação de cada requisição.</summary>
+    public string ApiKey { get; set; } = string.Empty;
+
+    public int BatchSize { get; set; } = 50;
+
+    public int SyncIntervalSeconds { get; set; } = 60;
+
+    public int MaxRetries { get; set; } = 3;
 }

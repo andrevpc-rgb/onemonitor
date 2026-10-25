@@ -17,10 +17,11 @@ TestResults/
 *.trx
 coverage/
 
-## OneMonitor local data (SQLite + relatórios gerados)
+## OneMonitor local data (SQLite + relatórios gerados + identidade do dispositivo)
 data/*.db
 data/*.db-shm
 data/*.db-wal
+data/device-id.txt
 data/reports/*
 !data/.gitkeep
 !data/reports/.gitkeep

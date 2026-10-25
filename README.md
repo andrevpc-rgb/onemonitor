@@ -2,7 +2,7 @@
 
 Plataforma para monitorar, de forma transparente e respeitosa à privacidade, o uso do computador: tempo ativo, aplicativos utilizados, períodos de inatividade e relatórios de uso. Sem leitura de conteúdo de tela, sem captura de teclas, sem IA no caminho crítico do monitoramento.
 
-Este repositório está na **Fase 1**: um protótipo local para Windows (agente desktop apenas, sem dashboard, sem nuvem, sem IA).
+Este repositório é o **agente desktop** (Windows): Fases 1–3 concluídas — monitoramento local, categorias/justificativas, e preparação para sincronização com um backend (ainda inexistente; desabilitada por padrão). Sem dashboard, sem IA no caminho de monitoramento. Veja [docs/roadmap.md](docs/roadmap.md) para o detalhe de cada fase.
 
 ## Pré-requisitos
 
@@ -55,10 +55,14 @@ Por padrão os dados ficam em `data/onemonitor.db` dentro deste repositório dur
 
 Este repositório vive em `G:\Meu Drive\...` (unidade sincronizada pelo Google Drive). A geração do `apphost.exe` nativo do projeto `OneMonitor.Agent` usa memory-mapped files, que o Google Drive (modo stream) bloqueia de forma intermitente, causando falhas `MSB4018`/`CreateAppHost` no build. Por isso `OneMonitor.Agent.csproj` tem `UseAppHost=false`: `dotnet build`, `dotnet test`, `dotnet run` e `./scripts/*.ps1` continuam funcionando normalmente, só não existe um `.exe` nativo clicável no `bin/`. Se mover o projeto para um disco local (fora de sincronização), remova a linha `<UseAppHost>false</UseAppHost>` do csproj para voltar a gerar o `.exe` nativo.
 
-## Escopo da Fase 1
+## Escopo implementado (Fases 1–3)
 
-Implementado: detecção de aplicativo/processo/janela em primeiro plano, duração de atividades, detecção de inatividade (limite configurável, padrão 5 min), agrupamento de atividades consecutivas, persistência local em SQLite, funcionamento 100% offline, relatório diário local em HTML e JSON, separação entre tempo ativo / inativo / não classificado, testes automatizados.
+Detecção de aplicativo/processo/janela em primeiro plano, duração de atividades, detecção de inatividade (limite configurável), agrupamento de atividades consecutivas, persistência local em SQLite, funcionamento 100% offline, relatório diário local em HTML e JSON (ativo/inativo/justificado/não classificado, por categoria, por janela/site, linha do tempo), categorias configuráveis (`categories.json`), pop-up de justificativa de ausência, fila offline de sincronização com retentativa/backoff (desabilitada por padrão — ver [docs/architecture.md](docs/architecture.md)), testes automatizados.
 
-Fora de escopo nesta fase (ver [docs/roadmap.md](docs/roadmap.md)): IA/insights, login, multiempresa, cobrança, sincronização com nuvem, captura de tela, leitura de conteúdo de tela, execução automática de comandos, bloqueio de sites, integração com calendário, extensão de navegador.
+Fora de escopo até agora (ver [docs/roadmap.md](docs/roadmap.md)): o backend/API em si, dashboard web, login, multiempresa, cobrança, IA/insights, captura de tela, leitura de conteúdo de tela, execução automática de comandos, bloqueio de sites, integração com calendário, extensão de navegador.
+
+### Sincronização com um backend (opcional, desabilitada por padrão)
+
+Edite `Sync` em `appsettings.json` (`Enabled`, `ApiBaseUrl`, `ApiKey`, `BatchSize`, `SyncIntervalSeconds`, `MaxRetries`) quando houver um backend real para apontar. Sem isso configurado, o agente funciona exatamente como antes — 100% local.
 
 Veja [docs/privacy.md](docs/privacy.md) para os princípios de privacidade que guiam o design.

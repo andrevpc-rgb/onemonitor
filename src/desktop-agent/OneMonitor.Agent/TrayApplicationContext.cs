@@ -1,3 +1,4 @@
+using System.Threading;
 using OneMonitor.Agent.Core.Services;
 using OneMonitor.Agent.Infrastructure.Reporting;
 
@@ -11,20 +12,33 @@ public sealed class TrayApplicationContext : ApplicationContext
 {
     private readonly ActivityTracker _tracker;
     private readonly DailyReportService _reportService;
+    private readonly SyncService? _syncService;
     private readonly System.Windows.Forms.Timer _timer;
+    private readonly System.Threading.Timer? _syncTimer;
     private readonly NotifyIcon _trayIcon;
     private readonly ToolStripMenuItem _statusItem;
     private readonly ToolStripMenuItem _pauseResumeItem;
     private bool _isPaused;
+    private int _syncInProgress;
 
-    public TrayApplicationContext(ActivityTracker tracker, DailyReportService reportService, TimeSpan pollingInterval)
+    public TrayApplicationContext(
+        ActivityTracker tracker,
+        DailyReportService reportService,
+        TimeSpan pollingInterval,
+        SyncService? syncService = null,
+        TimeSpan syncInterval = default)
     {
         _tracker = tracker;
         _reportService = reportService;
+        _syncService = syncService;
 
         _statusItem = new ToolStripMenuItem("Status: iniciando...") { Enabled = false };
         _pauseResumeItem = new ToolStripMenuItem("Pausar", null, OnPauseResumeClicked);
         var reportItem = new ToolStripMenuItem("Gerar relatório de hoje", null, OnGenerateReportClicked);
+        var syncNowItem = new ToolStripMenuItem("Sincronizar agora", null, OnSyncNowClicked)
+        {
+            Enabled = _syncService is not null
+        };
         var exitItem = new ToolStripMenuItem("Encerrar", null, OnExitClicked);
 
         var menu = new ContextMenuStrip();
@@ -32,6 +46,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(_pauseResumeItem);
         menu.Items.Add(reportItem);
+        menu.Items.Add(syncNowItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(exitItem);
 
@@ -48,6 +63,14 @@ public sealed class TrayApplicationContext : ApplicationContext
         _timer.Start();
 
         _tracker.IdleReturned += OnIdleReturned;
+
+        if (_syncService is not null)
+        {
+            // Timer de thread de background (não o Timer de WinForms): chamadas de rede não
+            // devem rodar na thread de UI, sob risco de travar o ícone/menu enquanto aguardam.
+            var intervalMs = (int)syncInterval.TotalMilliseconds;
+            _syncTimer = new System.Threading.Timer(OnSyncTimerTick, null, intervalMs, intervalMs);
+        }
     }
 
     private void OnIdleReturned(object? sender, IdleReturnedEventArgs e)
@@ -105,6 +128,54 @@ public sealed class TrayApplicationContext : ApplicationContext
         }
     }
 
+    // Disparado pelo System.Threading.Timer numa thread do pool — nunca a thread de UI.
+    private async void OnSyncTimerTick(object? state) => await RunSyncAsync();
+
+    private async void OnSyncNowClicked(object? sender, EventArgs e)
+    {
+        var result = await RunSyncAsync();
+        if (result is null)
+        {
+            return;
+        }
+
+        var message = result.Success
+            ? (result.EventsSynced > 0 ? $"{result.EventsSynced} evento(s) sincronizado(s)." : "Nada pendente para sincronizar.")
+            : $"Falha ao sincronizar: {result.Error}";
+
+        MessageBox.Show(message, "OneMonitor", MessageBoxButtons.OK,
+            result.Success ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+    }
+
+    private async Task<SyncCycleResult?> RunSyncAsync()
+    {
+        if (_syncService is null)
+        {
+            return null;
+        }
+
+        // Evita sobrepor um ciclo de sync com o anterior (ex.: rede lenta + timer periódico).
+        if (Interlocked.CompareExchange(ref _syncInProgress, 1, 0) != 0)
+        {
+            return null;
+        }
+
+        try
+        {
+            return await _syncService.SyncPendingAsync();
+        }
+        catch (Exception)
+        {
+            // SyncService só deveria devolver falhas como SyncCycleResult, nunca lançar; isto
+            // é uma rede de segurança para não derrubar o agente por um erro inesperado de sync.
+            return SyncCycleResult.Failed("Erro inesperado durante a sincronização.");
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _syncInProgress, 0);
+        }
+    }
+
     private void OnGenerateReportClicked(object? sender, EventArgs e)
     {
         var (jsonPath, htmlPath) = _reportService.GenerateForToday();
@@ -131,6 +202,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         {
             _tracker.IdleReturned -= OnIdleReturned;
             _timer.Dispose();
+            _syncTimer?.Dispose();
             _trayIcon.Dispose();
         }
 

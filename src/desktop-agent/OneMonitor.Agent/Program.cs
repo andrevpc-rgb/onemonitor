@@ -2,6 +2,7 @@ using OneMonitor.Agent.Core.Services;
 using OneMonitor.Agent.Infrastructure.Categorization;
 using OneMonitor.Agent.Infrastructure.Persistence;
 using OneMonitor.Agent.Infrastructure.Reporting;
+using OneMonitor.Agent.Infrastructure.Sync;
 using OneMonitor.Agent.Infrastructure.Time;
 using OneMonitor.Agent.Infrastructure.Windows;
 
@@ -33,11 +34,40 @@ internal static class Program
             settings.ResolvedReportOutputDirectory,
             categoryResolver);
 
+        var syncService = BuildSyncServiceIfEnabled(settings, repository);
+
         using var context = new TrayApplicationContext(
             tracker,
             reportService,
-            TimeSpan.FromSeconds(settings.PollingIntervalSeconds));
+            TimeSpan.FromSeconds(settings.PollingIntervalSeconds),
+            syncService,
+            TimeSpan.FromSeconds(settings.Sync.SyncIntervalSeconds));
 
         Application.Run(context);
+    }
+
+    private static SyncService? BuildSyncServiceIfEnabled(AppSettings settings, SqliteActivityRepository repository)
+    {
+        if (!settings.Sync.Enabled)
+        {
+            return null;
+        }
+
+        var deviceId = DeviceIdentityProvider.GetOrCreateDeviceId(settings.ResolvedDeviceIdFilePath);
+
+        var httpClient = new HttpClient { BaseAddress = new Uri(settings.Sync.ApiBaseUrl) };
+        httpClient.DefaultRequestHeaders.Add("X-Api-Key", settings.Sync.ApiKey);
+        httpClient.DefaultRequestHeaders.Add("X-Device-Id", deviceId);
+
+        var apiClient = new HttpSyncApiClient(httpClient);
+
+        return new SyncService(
+            repository,
+            apiClient,
+            new SystemClock(),
+            new TaskDelay(),
+            deviceId,
+            settings.Sync.BatchSize,
+            settings.Sync.MaxRetries);
     }
 }

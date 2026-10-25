@@ -21,16 +21,39 @@ Explicitamente **fora de escopo** na Fase 1 (não implementado): chamadas a Gemi
 - Relatório HTML/JSON com tempo por categoria, ausências justificadas (motivo, duração, ocorrências) e linha do tempo cronológica (horário local de início/fim de cada atividade), separados do tempo inativo genérico.
 - Testes automatizados (resolução de categoria, evento de retorno de inatividade, persistência de justificativa, agregação no relatório, corte de dia pelo fuso local).
 
-## Fase 3 — Sincronização e dashboard web (futuro, não iniciado)
+## Fase 3 — Sincronização e Comunicação com a Nuvem (lado do agente) — ✅ concluída
 
-- API para enviar dados consolidados do agente para a nuvem.
-- Dashboard web para o usuário visualizar seus próprios relatórios.
+Escopo desta fase: preparar o **agente desktop** para enviar dados em lotes a um backend,
+mantendo a resiliência offline do SQLite. Não inclui construir o backend/dashboard em si —
+isso é trabalho futuro, quando houver um servidor real para apontar. Por isso a sincronização
+vem **desabilitada por padrão** (`Sync.Enabled: false`); o agente continua 100% funcional
+offline sem ela, como nas fases anteriores.
+
+- Fila offline no SQLite: `ActivityRecords` ganha `EventId` (GUID, chave de deduplicação) e
+  `SyncedAt` (nulo = pendente), com migração automática para bancos de fases anteriores.
+- `SyncService` (Core, sem I/O): busca registros pendentes, monta lotes (`BatchSize`
+  configurável) e usa `ISyncApiClient` para enviar — testável sem rede nem SQLite reais.
+- Retentativa com backoff exponencial (1s, 2s, 4s...) para falhas transitórias (rede, 5xx);
+  falhas permanentes (4xx) não insistem; em ambos os casos os registros ficam pendentes para
+  o próximo ciclo, sem perda de dados.
+- Autenticação por dispositivo: `DeviceId` (GUID persistido localmente) + `ApiKey` configurável
+  em `appsettings.json`, enviados como headers HTTP.
+- Contratos da API (`ActivitySyncEvent`, `SyncBatch`) em `Core/Models`, implementação HTTP
+  (`HttpSyncApiClient`) na Infrastructure.
+- Menu "Sincronizar agora" na bandeja (ativo só quando `Sync.Enabled`).
+- Testes automatizados (fila/migração, montagem de lotes, retentativa com backoff mockando o
+  HttpClient, marcação de sincronizado, reabertura de pendência ao fundir um registro já
+  sincronizado).
+
+Explicitamente fora do escopo desta fase: o backend/API em si, dashboard web, login de
+usuário final — ficam para quando esse trabalho for decidido explicitamente.
+
+## Fase 4 — Backend, Dashboard Web e Multiempresa (futuro, não iniciado)
+
+- API/backend que recebe os lotes enviados pelo agente (Fase 3) e os persiste.
+- Dashboard web para o usuário e para gestores visualizarem relatórios.
 - Autenticação/login.
-
-## Fase 4 — Multiempresa e gestão (futuro, não iniciado)
-
-- Multi-tenancy (empresas, equipes, gestores).
-- Papéis e permissões (usuário vs. gestor).
+- Multi-tenancy (empresas, equipes, gestores), papéis e permissões (usuário vs. gestor).
 - Cobrança/planos.
 
 ## Fase 5 — Insights com IA (futuro, não iniciado)

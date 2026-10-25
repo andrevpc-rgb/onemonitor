@@ -19,4 +19,10 @@ public interface IActivityRepository
     IReadOnlyList<ActivityRecord> GetAllRecords();
 
     IReadOnlyList<ActivityRecord> GetRecordsForDate(DateOnly date);
+
+    /// <summary>Registros ainda não sincronizados (SyncedAt nulo), mais antigos primeiro, até maxCount.</summary>
+    IReadOnlyList<ActivityRecord> GetPendingSyncRecords(int maxCount);
+
+    /// <summary>Marca os registros informados como sincronizados no instante dado.</summary>
+    void MarkSynced(IReadOnlyList<long> recordIds, DateTimeOffset syncedAt);
 }

@@ -24,6 +24,7 @@ public class InMemoryActivityRepository : IActivityRepository
         if (canMerge)
         {
             last!.EndTime = record.EndTime;
+            last.SyncedAt = null; // mesma regra do SqliteActivityRepository: fusão reabre pendência de sync.
             return last.Id;
         }
 
@@ -35,7 +36,8 @@ public class InMemoryActivityRepository : IActivityRepository
             Type = record.Type,
             StartTime = record.StartTime,
             EndTime = record.EndTime,
-            Justification = record.Justification
+            Justification = record.Justification,
+            EventId = string.IsNullOrEmpty(record.EventId) ? Guid.NewGuid().ToString() : record.EventId
         };
         _records.Add(newRecord);
         return newRecord.Id;
@@ -56,4 +58,19 @@ public class InMemoryActivityRepository : IActivityRepository
 
     public IReadOnlyList<ActivityRecord> GetRecordsForDate(DateOnly date) =>
         _records.Where(r => DateOnly.FromDateTime(r.StartTime.UtcDateTime) == date).ToList();
+
+    public IReadOnlyList<ActivityRecord> GetPendingSyncRecords(int maxCount) =>
+        _records.Where(r => r.SyncedAt is null).Take(maxCount).ToList();
+
+    public void MarkSynced(IReadOnlyList<long> recordIds, DateTimeOffset syncedAt)
+    {
+        foreach (var id in recordIds)
+        {
+            var record = _records.FirstOrDefault(r => r.Id == id);
+            if (record is not null)
+            {
+                record.SyncedAt = syncedAt;
+            }
+        }
+    }
 }
