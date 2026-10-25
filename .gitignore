@@ -1,0 +1,30 @@
+## .NET / Visual Studio
+bin/
+obj/
+*.user
+*.suo
+.vs/
+*.VC.db
+*.VC.VC.opendb
+
+## Rider / VS Code
+.idea/
+.vscode/
+*.swp
+
+## Test / coverage
+TestResults/
+*.trx
+coverage/
+
+## OneMonitor local data (SQLite + relatórios gerados)
+data/*.db
+data/*.db-shm
+data/*.db-wal
+data/reports/*
+!data/.gitkeep
+!data/reports/.gitkeep
+
+## OS
+Thumbs.db
+.DS_Store

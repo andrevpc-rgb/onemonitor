@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <SupportedOSPlatformVersion>7.0</SupportedOSPlatformVersion>
+    <!--
+      Este repositório vive em uma unidade sincronizada pelo Google Drive (G:\Meu Drive).
+      A geração do apphost.exe nativo usa memory-mapped files, que o Google Drive (modo
+      stream) bloqueia de forma intermitente, causando falhas MSB4018 em "CreateAppHost".
+      Com UseAppHost=false, "dotnet run"/"dotnet OneMonitor.Agent.dll" continuam funcionando
+      normalmente; só não há um .exe nativo clicável a partir daqui. Se o projeto for movido
+      para um disco local (fora de sincronização), remova esta linha para voltar a gerar o
+      .exe nativo.
+    -->
+    <UseAppHost>false</UseAppHost>
+    <RootNamespace>OneMonitor.Agent</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OneMonitor.Agent.Core\OneMonitor.Agent.Core.csproj" />
+    <ProjectReference Include="..\OneMonitor.Agent.Infrastructure\OneMonitor.Agent.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>
