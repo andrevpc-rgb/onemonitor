@@ -1,4 +1,4 @@
-# Arquitetura — Fase 1 (Agente Desktop)
+# Arquitetura — Agente Desktop
 
 ## Visão geral
 
@@ -56,16 +56,30 @@ SQLite via `Microsoft.Data.Sqlite` (sem ORM — o schema é pequeno e as queries
 - **Fora de um checkout de desenvolvimento** (ou se detecção falhar): `%LOCALAPPDATA%\OneMonitor\onemonitor.db`.
 - Sempre sobrescrevível via `appsettings.json` (`DatabasePath`).
 
+`SqliteActivityRepository.Initialize()` roda `CREATE TABLE IF NOT EXISTS` e, em seguida, verifica via `PRAGMA table_info` se a coluna `Justification` (adicionada na Fase 2) existe; se não existir — caso de um banco criado antes dela —, roda `ALTER TABLE ... ADD COLUMN` para migrar sem perder os dados já gravados. É a forma adotada neste projeto de evoluir o schema sem introduzir uma ferramenta de migrations.
+
 ## Relatórios
 
-`OneMonitor.Agent.Core.Services.ReportGenerator` agrega uma lista de `ActivityRecord` (sem nenhuma I/O) em um `ReportData`: tempo total ativo (por aplicativo), inativo e não classificado. `OneMonitor.Agent.Infrastructure.Reporting.ReportFileWriter` escreve esse resultado em JSON (`System.Text.Json`) e HTML (template simples) dentro de `data/reports` (ou `%LOCALAPPDATA%\OneMonitor\reports`).
+`OneMonitor.Agent.Core.Services.ReportGenerator` agrega uma lista de `ActivityRecord` (sem nenhuma I/O) em um `ReportData`: tempo total ativo (por aplicativo, por janela/site e por categoria), inativo, justificado e não classificado. `OneMonitor.Agent.Infrastructure.Reporting.ReportFileWriter` escreve esse resultado em JSON (`System.Text.Json`) e HTML (template simples) dentro de `data/reports` (ou `%LOCALAPPDATA%\OneMonitor\reports`).
 
 ## UI (bandeja do sistema)
 
-`TrayApplicationContext` (WinForms `ApplicationContext` + `NotifyIcon`) expõe um menu de contexto com: status atual (aplicativo + duração), pausar/retomar, gerar relatório do dia, encerrar. Não há janela principal — é intencionalmente uma aplicação "invisível" além do ícone.
+`TrayApplicationContext` (WinForms `ApplicationContext` + `NotifyIcon`) expõe um menu de contexto com: status atual (aplicativo + duração), pausar/retomar, gerar relatório do dia, encerrar. Não há janela principal — é intencionalmente uma aplicação "invisível" além do ícone, exceto pelo pop-up de justificativa (ver abaixo).
+
+## Categorias (Fase 2)
+
+`ICategoryResolver.Resolve(processName, windowTitle)` decide a categoria de um instante de atividade. A implementação padrão, `RuleBasedCategoryResolver` (Core, sem I/O, testável), recebe uma lista ordenada de `CategoryDefinition` — cada uma com um nome e uma lista de `CategoryRule` (processo + opcionalmente um trecho do título da janela) — e retorna a categoria da **primeira** que bater; sem match, cai na categoria padrão (`"Outros"`). A ordem importa: regras mais específicas (ex.: `chrome` + título contendo "GitHub" → "Desenvolvimento") precisam estar em categorias declaradas **antes** das genéricas (ex.: `chrome` → "Navegação").
+
+`CategoryRulesLoader` (Infrastructure) só faz a leitura/parse de `categories.json` e monta o resolver — nenhuma lógica de match vive fora do Core. O arquivo fica em `OneMonitor.Agent/categories.json`, copiado para o output como o `appsettings.json`, e seu caminho pode ser sobrescrito via `appsettings.json` (`CategoriesConfigPath`).
+
+## Justificativa de ausência (Fase 2)
+
+`ActivityTracker` expõe o evento `IdleReturned`, disparado em `Tick()` quando a atividade sai de `Idle` para qualquer outro tipo (nunca a partir de `Flush()` — pausar/encerrar não deve interromper o usuário). O evento carrega o `Id` do registro de inatividade já persistido (por isso `IActivityRepository.SaveClosedRecord` retorna esse `Id`) e a duração do período.
+
+`TrayApplicationContext` assina esse evento: pausa o timer de polling, exibe `JustificationPromptForm` (WinForms simples, motivos pré-definidos como botões + opção de pular) e, se o usuário escolher um motivo, chama `ActivityTracker.SetJustification(id, motivo)`, que grava via `IActivityRepository.SetJustification`. O motivo fica associado ao registro de inatividade (`ActivityRecord.Justification`, nullable) e aparece no relatório separado do tempo inativo genérico.
 
 ## Extensibilidade para fases futuras
 
-- `IActivityRepository` pode futuramente ganhar uma implementação que também envia os dados para uma API (Fase 2), sem alterar `ActivityTracker`.
-- `ReportData` é um modelo plano, serializável, que pode ser reaproveitado por um dashboard web ou por uma camada de insights de IA (Fase 4) sem reprocessar os dados brutos.
+- `IActivityRepository` pode futuramente ganhar uma implementação que também envia os dados para uma API (Fase 3), sem alterar `ActivityTracker`.
+- `ReportData` é um modelo plano, serializável, que pode ser reaproveitado por um dashboard web ou por uma camada de insights de IA (Fase 5) sem reprocessar os dados brutos.
 - A IA nunca entra no caminho de `ActivityTracker`/`IdleTimeProvider`/`ActiveWindowProvider` — qualquer uso futuro de IA consome `ReportData`/registros já consolidados, nunca o loop de monitoramento em tempo real.

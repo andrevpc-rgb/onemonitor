@@ -81,6 +81,55 @@ public class SqliteActivityRepositoryRecoveryTests : IDisposable
         Assert.True(all[1].StartTime > all[0].EndTime);
     }
 
+    [Fact]
+    public void OpeningRepository_MigratesPreExistingDatabaseWithoutJustificationColumn()
+    {
+        // Simula um banco criado na Fase 1, antes da coluna Justification existir.
+        using (var connection = new SqliteConnection($"Data Source={_databasePath}"))
+        {
+            connection.Open();
+            var create = connection.CreateCommand();
+            create.CommandText = """
+                CREATE TABLE ActivityRecords (
+                    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ProcessName TEXT NOT NULL,
+                    WindowTitle TEXT NOT NULL,
+                    Type INTEGER NOT NULL,
+                    StartTime TEXT NOT NULL,
+                    EndTime TEXT NOT NULL
+                );
+                """;
+            create.ExecuteNonQuery();
+
+            var insert = connection.CreateCommand();
+            insert.CommandText = """
+                INSERT INTO ActivityRecords (ProcessName, WindowTitle, Type, StartTime, EndTime)
+                VALUES ('devenv', 'Solution - Visual Studio', 0, '2026-01-15T09:00:00+00:00', '2026-01-15T09:10:00+00:00')
+                """;
+            insert.ExecuteNonQuery();
+        }
+        SqliteConnection.ClearAllPools();
+
+        var repository = new SqliteActivityRepository(_databasePath);
+
+        var existing = Assert.Single(repository.GetAllRecords());
+        Assert.Equal("devenv", existing.ProcessName);
+        Assert.Null(existing.Justification);
+
+        var idleId = repository.SaveClosedRecord(new ActivityRecord
+        {
+            ProcessName = "(idle)",
+            WindowTitle = "",
+            Type = ActivityType.Idle,
+            StartTime = existing.EndTime,
+            EndTime = existing.EndTime.AddMinutes(12)
+        });
+        repository.SetJustification(idleId, "Pausa");
+
+        var idleRecord = repository.GetAllRecords().Single(r => r.Id == idleId);
+        Assert.Equal("Pausa", idleRecord.Justification);
+    }
+
     public void Dispose()
     {
         SqliteConnection.ClearAllPools();

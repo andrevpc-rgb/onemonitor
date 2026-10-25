@@ -14,5 +14,8 @@ public class ActivityRecord
 
     public DateTimeOffset EndTime { get; set; }
 
+    /// <summary>Motivo informado pelo usuário para um período de inatividade (null = não justificado).</summary>
+    public string? Justification { get; set; }
+
     public TimeSpan Duration => EndTime - StartTime;
 }

@@ -46,6 +46,28 @@ public sealed class TrayApplicationContext : ApplicationContext
         _timer = new System.Windows.Forms.Timer { Interval = (int)pollingInterval.TotalMilliseconds };
         _timer.Tick += OnTimerTick;
         _timer.Start();
+
+        _tracker.IdleReturned += OnIdleReturned;
+    }
+
+    private void OnIdleReturned(object? sender, IdleReturnedEventArgs e)
+    {
+        // Pausa o polling enquanto o pop-up está aberto: evita que novos ticks mudem o
+        // estado do tracker por baixo do diálogo modal.
+        _timer.Stop();
+        try
+        {
+            using var form = new JustificationPromptForm(e.Duration);
+            var result = form.ShowDialog();
+            if (result == DialogResult.OK && form.SelectedJustification is not null)
+            {
+                _tracker.SetJustification(e.RecordId, form.SelectedJustification);
+            }
+        }
+        finally
+        {
+            _timer.Start();
+        }
     }
 
     private void OnTimerTick(object? sender, EventArgs e)
@@ -107,6 +129,7 @@ public sealed class TrayApplicationContext : ApplicationContext
     {
         if (disposing)
         {
+            _tracker.IdleReturned -= OnIdleReturned;
             _timer.Dispose();
             _trayIcon.Dispose();
         }

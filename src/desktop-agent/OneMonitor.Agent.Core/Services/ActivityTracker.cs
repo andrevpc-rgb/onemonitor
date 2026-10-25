@@ -35,6 +35,13 @@ public class ActivityTracker
     /// <summary>Registro em memória ainda não persistido, refletindo a atividade corrente.</summary>
     public ActivityRecord? CurrentRecord => _openRecord;
 
+    /// <summary>
+    /// Disparado quando a atividade sai de Idle para qualquer outro tipo (usuário voltou de
+    /// um período de inatividade). Não dispara a partir de <see cref="Flush"/> — pausar ou
+    /// encerrar o monitoramento não deve interromper o usuário com um pedido de justificativa.
+    /// </summary>
+    public event EventHandler<IdleReturnedEventArgs>? IdleReturned;
+
     public void Tick()
     {
         var now = _clock.UtcNow;
@@ -87,10 +94,20 @@ public class ActivityTracker
             // O registro antigo termina agora, no instante em que a mudança foi detectada
             // (e não no último tick em que a atividade ainda era a mesma).
             _openRecord.EndTime = now;
-            _repository.SaveClosedRecord(_openRecord);
+            var closedRecord = _openRecord;
+            var closedRecordId = _repository.SaveClosedRecord(closedRecord);
             _openRecord = CreateRecord(type, processName, windowTitle, now);
+
+            if (closedRecord.Type == ActivityType.Idle && type != ActivityType.Idle)
+            {
+                IdleReturned?.Invoke(this, new IdleReturnedEventArgs(closedRecordId, closedRecord.StartTime, closedRecord.EndTime));
+            }
         }
     }
+
+    /// <summary>Associa um motivo de ausência a um período de inatividade já persistido.</summary>
+    public void SetJustification(long recordId, string justification) =>
+        _repository.SetJustification(recordId, justification);
 
     /// <summary>Fecha e persiste o registro aberto, se houver (usado ao pausar/encerrar).</summary>
     public void Flush()

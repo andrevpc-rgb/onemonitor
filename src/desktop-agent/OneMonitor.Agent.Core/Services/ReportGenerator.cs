@@ -1,3 +1,4 @@
+using OneMonitor.Agent.Core.Abstractions;
 using OneMonitor.Agent.Core.Models;
 
 namespace OneMonitor.Agent.Core.Services;
@@ -7,11 +8,19 @@ namespace OneMonitor.Agent.Core.Services;
 /// </summary>
 public class ReportGenerator
 {
+    private readonly ICategoryResolver _categoryResolver;
+
+    public ReportGenerator(ICategoryResolver categoryResolver)
+    {
+        _categoryResolver = categoryResolver;
+    }
+
     public ReportData Generate(IReadOnlyList<ActivityRecord> records, DateOnly date)
     {
         var active = records.Where(r => r.Type == ActivityType.Active).ToList();
         var idle = records.Where(r => r.Type == ActivityType.Idle).ToList();
         var unclassified = records.Where(r => r.Type == ActivityType.Unclassified).ToList();
+        var justified = idle.Where(r => !string.IsNullOrWhiteSpace(r.Justification)).ToList();
 
         var byApp = active
             .GroupBy(r => r.ProcessName)
@@ -26,12 +35,27 @@ public class ReportGenerator
             .OrderByDescending(w => w.Duration)
             .ToList();
 
+        var byCategory = active
+            .GroupBy(r => _categoryResolver.Resolve(r.ProcessName, r.WindowTitle))
+            .Select(g => new CategoryUsage(g.Key, SumDuration(g)))
+            .OrderByDescending(c => c.Duration)
+            .ToList();
+
+        var byJustification = justified
+            .GroupBy(r => r.Justification!)
+            .Select(g => new JustifiedAbsence(g.Key, SumDuration(g), g.Count()))
+            .OrderByDescending(j => j.Duration)
+            .ToList();
+
         return new ReportData(
             date,
             byApp,
             byWindow,
+            byCategory,
+            byJustification,
             SumDuration(active),
             SumDuration(idle),
+            SumDuration(justified),
             SumDuration(unclassified));
     }
 

@@ -33,6 +33,12 @@ public class ReportFileWriter
         var windowRows = string.Join(Environment.NewLine, report.WindowUsages.Select(w =>
             $"<tr><td>{WebUtility.HtmlEncode(w.ProcessName)}</td><td>{WebUtility.HtmlEncode(w.WindowTitle)}</td><td>{FormatDuration(w.Duration)}</td></tr>"));
 
+        var categoryRows = string.Join(Environment.NewLine, report.CategoryUsages.Select(c =>
+            $"<tr><td>{WebUtility.HtmlEncode(c.Category)}</td><td>{FormatDuration(c.Duration)}</td></tr>"));
+
+        var justificationRows = string.Join(Environment.NewLine, report.JustifiedAbsences.Select(j =>
+            $"<tr><td>{WebUtility.HtmlEncode(j.Justification)}</td><td>{FormatDuration(j.Duration)}</td><td>{j.Occurrences}</td></tr>"));
+
         return $$"""
             <!DOCTYPE html>
             <html lang="pt-br">
@@ -52,9 +58,17 @@ public class ReportFileWriter
                 <p class="summary">
                     <span><strong>Ativo:</strong> {{FormatDuration(report.TotalActive)}}</span>
                     <span><strong>Inativo:</strong> {{FormatDuration(report.TotalIdle)}}</span>
+                    <span><strong>Justificado:</strong> {{FormatDuration(report.TotalJustified)}}</span>
                     <span><strong>Não classificado:</strong> {{FormatDuration(report.TotalUnclassified)}}</span>
                     <span><strong>Total monitorado:</strong> {{FormatDuration(report.TotalTracked)}}</span>
                 </p>
+                <h2>Tempo por categoria</h2>
+                <table>
+                    <thead><tr><th>Categoria</th><th>Duração</th></tr></thead>
+                    <tbody>
+                    {{categoryRows}}
+                    </tbody>
+                </table>
                 <h2>Tempo por aplicativo</h2>
                 <table>
                     <thead><tr><th>Aplicativo</th><th>Duração</th></tr></thead>
@@ -67,6 +81,13 @@ public class ReportFileWriter
                     <thead><tr><th>Aplicativo</th><th>Janela / site</th><th>Duração</th></tr></thead>
                     <tbody>
                     {{windowRows}}
+                    </tbody>
+                </table>
+                <h2>Ausências justificadas</h2>
+                <table>
+                    <thead><tr><th>Motivo</th><th>Duração</th><th>Ocorrências</th></tr></thead>
+                    <tbody>
+                    {{justificationRows}}
                     </tbody>
                 </table>
             </body>

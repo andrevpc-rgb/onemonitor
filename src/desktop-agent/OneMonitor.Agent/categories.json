@@ -1,0 +1,46 @@
+{
+  "defaultCategory": "Outros",
+  "categories": [
+    {
+      "name": "Desenvolvimento",
+      "rules": [
+        { "processName": "devenv" },
+        { "processName": "Code" },
+        { "processName": "dotnet" },
+        { "processName": "Rider64" },
+        { "processName": "DataGrip" },
+        { "processName": "chrome", "windowTitleContains": "GitHub" },
+        { "processName": "chrome", "windowTitleContains": "localhost" }
+      ]
+    },
+    {
+      "name": "Comunicação",
+      "rules": [
+        { "processName": "Teams" },
+        { "processName": "ms-teams" },
+        { "processName": "Slack" },
+        { "processName": "OUTLOOK" },
+        { "processName": "Discord" },
+        { "processName": "chrome", "windowTitleContains": "Gmail" },
+        { "processName": "chrome", "windowTitleContains": "WhatsApp" }
+      ]
+    },
+    {
+      "name": "Navegação",
+      "rules": [
+        { "processName": "chrome" },
+        { "processName": "firefox" },
+        { "processName": "msedge" }
+      ]
+    },
+    {
+      "name": "Sistema",
+      "rules": [
+        { "processName": "explorer" },
+        { "processName": "SearchHost" },
+        { "processName": "ShellExperienceHost" },
+        { "processName": "TextInputHost" }
+      ]
+    }
+  ]
+}

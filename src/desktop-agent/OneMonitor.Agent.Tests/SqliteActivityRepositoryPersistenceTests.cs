@@ -88,6 +88,42 @@ public class SqliteActivityRepositoryPersistenceTests : IDisposable
         Assert.Equal("b", day2Records[0].ProcessName);
     }
 
+    [Fact]
+    public void SaveClosedRecord_ReturnsAnIdUsableToSetJustification()
+    {
+        var repository = new SqliteActivityRepository(_databasePath);
+        var start = new DateTimeOffset(2026, 1, 15, 9, 0, 0, TimeSpan.Zero);
+
+        var id = repository.SaveClosedRecord(new ActivityRecord
+        {
+            ProcessName = "(idle)",
+            WindowTitle = "",
+            Type = ActivityType.Idle,
+            StartTime = start,
+            EndTime = start.AddMinutes(12)
+        });
+
+        repository.SetJustification(id, "Reunião Presencial");
+
+        var saved = Assert.Single(repository.GetAllRecords());
+        Assert.Equal("Reunião Presencial", saved.Justification);
+    }
+
+    [Fact]
+    public void GetAllRecords_WithoutJustification_ReturnsNull()
+    {
+        var repository = new SqliteActivityRepository(_databasePath);
+        var start = new DateTimeOffset(2026, 1, 15, 9, 0, 0, TimeSpan.Zero);
+
+        repository.SaveClosedRecord(new ActivityRecord
+        {
+            ProcessName = "chrome", WindowTitle = "", Type = ActivityType.Active, StartTime = start, EndTime = start.AddMinutes(5)
+        });
+
+        var saved = Assert.Single(repository.GetAllRecords());
+        Assert.Null(saved.Justification);
+    }
+
     public void Dispose()
     {
         // Microsoft.Data.Sqlite mantém um pool de conexões nativas; sem limpá-lo, o

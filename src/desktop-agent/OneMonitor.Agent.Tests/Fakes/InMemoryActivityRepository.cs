@@ -11,7 +11,7 @@ public class InMemoryActivityRepository : IActivityRepository
 {
     private readonly List<ActivityRecord> _records = new();
 
-    public void SaveClosedRecord(ActivityRecord record)
+    public long SaveClosedRecord(ActivityRecord record)
     {
         var last = _records.Count > 0 ? _records[^1] : null;
         var canMerge =
@@ -24,18 +24,29 @@ public class InMemoryActivityRepository : IActivityRepository
         if (canMerge)
         {
             last!.EndTime = record.EndTime;
+            return last.Id;
         }
-        else
+
+        var newRecord = new ActivityRecord
         {
-            _records.Add(new ActivityRecord
-            {
-                Id = _records.Count + 1,
-                ProcessName = record.ProcessName,
-                WindowTitle = record.WindowTitle,
-                Type = record.Type,
-                StartTime = record.StartTime,
-                EndTime = record.EndTime
-            });
+            Id = _records.Count + 1,
+            ProcessName = record.ProcessName,
+            WindowTitle = record.WindowTitle,
+            Type = record.Type,
+            StartTime = record.StartTime,
+            EndTime = record.EndTime,
+            Justification = record.Justification
+        };
+        _records.Add(newRecord);
+        return newRecord.Id;
+    }
+
+    public void SetJustification(long recordId, string justification)
+    {
+        var record = _records.FirstOrDefault(r => r.Id == recordId);
+        if (record is not null)
+        {
+            record.Justification = justification;
         }
     }
 

@@ -28,21 +28,49 @@ public class SqliteActivityRepository : IActivityRepository
     private void Initialize()
     {
         using var connection = OpenConnection();
-        var command = connection.CreateCommand();
-        command.CommandText = """
+
+        var create = connection.CreateCommand();
+        create.CommandText = """
             CREATE TABLE IF NOT EXISTS ActivityRecords (
                 Id INTEGER PRIMARY KEY AUTOINCREMENT,
                 ProcessName TEXT NOT NULL,
                 WindowTitle TEXT NOT NULL,
                 Type INTEGER NOT NULL,
                 StartTime TEXT NOT NULL,
-                EndTime TEXT NOT NULL
+                EndTime TEXT NOT NULL,
+                Justification TEXT NULL
             );
             """;
-        command.ExecuteNonQuery();
+        create.ExecuteNonQuery();
+
+        // "CREATE TABLE IF NOT EXISTS" não adiciona colunas a uma tabela já existente
+        // (ex.: um banco criado na Fase 1, antes de Justification existir). Migra em caso de falta.
+        if (!HasColumn(connection, "ActivityRecords", "Justification"))
+        {
+            var alter = connection.CreateCommand();
+            alter.CommandText = "ALTER TABLE ActivityRecords ADD COLUMN Justification TEXT NULL";
+            alter.ExecuteNonQuery();
+        }
     }
 
-    public void SaveClosedRecord(ActivityRecord record)
+    private static bool HasColumn(SqliteConnection connection, string table, string column)
+    {
+        var command = connection.CreateCommand();
+        command.CommandText = $"PRAGMA table_info({table})";
+        using var reader = command.ExecuteReader();
+        while (reader.Read())
+        {
+            // PRAGMA table_info: coluna 1 = nome da coluna.
+            if (string.Equals(reader.GetString(1), column, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public long SaveClosedRecord(ActivityRecord record)
     {
         using var connection = OpenConnection();
         using var transaction = connection.BeginTransaction();
@@ -55,30 +83,48 @@ public class SqliteActivityRepository : IActivityRepository
             last.Type == record.Type &&
             last.EndTime == record.StartTime;
 
+        long id;
         if (canMerge)
         {
+            id = last!.Id;
             var update = connection.CreateCommand();
             update.CommandText = "UPDATE ActivityRecords SET EndTime = $endTime WHERE Id = $id";
             update.Parameters.AddWithValue("$endTime", record.EndTime.ToString("O"));
-            update.Parameters.AddWithValue("$id", last!.Id);
+            update.Parameters.AddWithValue("$id", id);
             update.ExecuteNonQuery();
         }
         else
         {
             var insert = connection.CreateCommand();
             insert.CommandText = """
-                INSERT INTO ActivityRecords (ProcessName, WindowTitle, Type, StartTime, EndTime)
-                VALUES ($processName, $windowTitle, $type, $startTime, $endTime)
+                INSERT INTO ActivityRecords (ProcessName, WindowTitle, Type, StartTime, EndTime, Justification)
+                VALUES ($processName, $windowTitle, $type, $startTime, $endTime, $justification)
                 """;
             insert.Parameters.AddWithValue("$processName", record.ProcessName);
             insert.Parameters.AddWithValue("$windowTitle", record.WindowTitle);
             insert.Parameters.AddWithValue("$type", (int)record.Type);
             insert.Parameters.AddWithValue("$startTime", record.StartTime.ToString("O"));
             insert.Parameters.AddWithValue("$endTime", record.EndTime.ToString("O"));
+            insert.Parameters.AddWithValue("$justification", (object?)record.Justification ?? DBNull.Value);
             insert.ExecuteNonQuery();
+
+            var lastId = connection.CreateCommand();
+            lastId.CommandText = "SELECT last_insert_rowid()";
+            id = (long)lastId.ExecuteScalar()!;
         }
 
         transaction.Commit();
+        return id;
+    }
+
+    public void SetJustification(long recordId, string justification)
+    {
+        using var connection = OpenConnection();
+        var command = connection.CreateCommand();
+        command.CommandText = "UPDATE ActivityRecords SET Justification = $justification WHERE Id = $id";
+        command.Parameters.AddWithValue("$justification", justification);
+        command.Parameters.AddWithValue("$id", recordId);
+        command.ExecuteNonQuery();
     }
 
     public ActivityRecord? GetLastRecord()
@@ -92,7 +138,7 @@ public class SqliteActivityRepository : IActivityRepository
         using var connection = OpenConnection();
         var command = connection.CreateCommand();
         command.CommandText = """
-            SELECT Id, ProcessName, WindowTitle, Type, StartTime, EndTime
+            SELECT Id, ProcessName, WindowTitle, Type, StartTime, EndTime, Justification
             FROM ActivityRecords
             ORDER BY Id ASC
             """;
@@ -107,7 +153,7 @@ public class SqliteActivityRepository : IActivityRepository
         using var connection = OpenConnection();
         var command = connection.CreateCommand();
         command.CommandText = """
-            SELECT Id, ProcessName, WindowTitle, Type, StartTime, EndTime
+            SELECT Id, ProcessName, WindowTitle, Type, StartTime, EndTime, Justification
             FROM ActivityRecords
             WHERE StartTime >= $start AND StartTime < $end
             ORDER BY Id ASC
@@ -128,7 +174,7 @@ public class SqliteActivityRepository : IActivityRepository
     {
         var command = connection.CreateCommand();
         command.CommandText = """
-            SELECT Id, ProcessName, WindowTitle, Type, StartTime, EndTime
+            SELECT Id, ProcessName, WindowTitle, Type, StartTime, EndTime, Justification
             FROM ActivityRecords
             ORDER BY Id DESC
             LIMIT 1
@@ -156,6 +202,7 @@ public class SqliteActivityRepository : IActivityRepository
         WindowTitle = reader.GetString(2),
         Type = (ActivityType)reader.GetInt32(3),
         StartTime = DateTimeOffset.Parse(reader.GetString(4)),
-        EndTime = DateTimeOffset.Parse(reader.GetString(5))
+        EndTime = DateTimeOffset.Parse(reader.GetString(5)),
+        Justification = reader.IsDBNull(6) ? null : reader.GetString(6)
     };
 }

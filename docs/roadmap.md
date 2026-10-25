@@ -1,6 +1,6 @@
 # Roadmap
 
-## Fase 1 — Protótipo local (Windows) — em andamento neste repositório
+## Fase 1 — Protótipo local (Windows) — ✅ concluída
 
 - Detecção de aplicativo/processo/janela em primeiro plano.
 - Duração de cada atividade.
@@ -8,29 +8,37 @@
 - Agrupamento de períodos consecutivos da mesma atividade.
 - Persistência local em SQLite, funcionamento 100% offline.
 - Iniciar / pausar / encerrar monitoramento; visualizar status atual.
-- Relatório diário local (HTML e JSON), separando tempo ativo / inativo / não classificado.
+- Relatório diário local (HTML e JSON), separando tempo ativo / inativo / não classificado, com detalhamento por janela/site.
 - Testes automatizados (agrupamento, duração, inatividade, persistência, recuperação após reinício).
 
-Explicitamente **fora de escopo** na Fase 1 (não implementar): chamadas a Gemini/Claude/outras IAs, login, multiempresa, cobrança, sincronização com nuvem, capturas de tela, leitura de conteúdo de tela, execução automática de comandos, bloqueio de sites, integração com calendário, extensão de navegador.
+Explicitamente **fora de escopo** na Fase 1 (não implementado): chamadas a Gemini/Claude/outras IAs, login, multiempresa, cobrança, sincronização com nuvem, capturas de tela, leitura de conteúdo de tela, execução automática de comandos, bloqueio de sites, integração com calendário, extensão de navegador.
 
-## Fase 2 — Sincronização e dashboard web (futuro, não iniciado)
+## Fase 2 — Categorias e Justificativas — em andamento neste repositório
+
+- Sistema de categorias configuráveis (processo/janela → categoria), com regras padrão em `categories.json`.
+- Detecção do retorno do usuário após período de inatividade, com pop-up (WinForms) para justificar a ausência (ex.: "Reunião Presencial", "Suporte a Colega", "Visita a Cliente", "Pausa").
+- Persistência da justificativa associada ao período de inatividade correspondente.
+- Relatório HTML/JSON com tempo por categoria e ausências justificadas (motivo, duração, ocorrências), separados do tempo inativo genérico.
+- Testes automatizados (resolução de categoria, evento de retorno de inatividade, persistência de justificativa, agregação no relatório).
+
+## Fase 3 — Sincronização e dashboard web (futuro, não iniciado)
 
 - API para enviar dados consolidados do agente para a nuvem.
 - Dashboard web para o usuário visualizar seus próprios relatórios.
 - Autenticação/login.
 
-## Fase 3 — Multiempresa e gestão (futuro, não iniciado)
+## Fase 4 — Multiempresa e gestão (futuro, não iniciado)
 
 - Multi-tenancy (empresas, equipes, gestores).
 - Papéis e permissões (usuário vs. gestor).
 - Cobrança/planos.
 
-## Fase 4 — Insights com IA (futuro, não iniciado)
+## Fase 5 — Insights com IA (futuro, não iniciado)
 
 - IA aplicada **somente sobre dados já consolidados** (nunca em tempo real, nunca controlando mouse/teclado/computador): resumos, comparações, sugestões de produtividade.
 - Nenhum uso de "computer use" como mecanismo de produto.
 
-## Fase 5 — Extensões (futuro, não iniciado)
+## Fase 6 — Extensões (futuro, não iniciado)
 
 - Extensão de navegador (contexto complementar de abas/sites, com os mesmos princípios de privacidade).
 - Integração com calendário.

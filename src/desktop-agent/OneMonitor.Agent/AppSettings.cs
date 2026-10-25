@@ -17,6 +17,13 @@ public class AppSettings
 
     public string? ReportOutputDirectory { get; set; }
 
+    public string? CategoriesConfigPath { get; set; }
+
+    public string ResolvedCategoriesConfigPath =>
+        !string.IsNullOrWhiteSpace(CategoriesConfigPath)
+            ? CategoriesConfigPath
+            : Path.Combine(AppContext.BaseDirectory, "categories.json");
+
     public string ResolvedDatabasePath =>
         !string.IsNullOrWhiteSpace(DatabasePath)
             ? DatabasePath

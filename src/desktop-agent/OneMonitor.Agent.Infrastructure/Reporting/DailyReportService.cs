@@ -8,14 +8,19 @@ public class DailyReportService
 {
     private readonly IActivityRepository _repository;
     private readonly ReportFileWriter _writer;
-    private readonly ReportGenerator _generator = new();
+    private readonly ReportGenerator _generator;
     private readonly string _outputDirectory;
 
-    public DailyReportService(IActivityRepository repository, ReportFileWriter writer, string outputDirectory)
+    public DailyReportService(
+        IActivityRepository repository,
+        ReportFileWriter writer,
+        string outputDirectory,
+        ICategoryResolver categoryResolver)
     {
         _repository = repository;
         _writer = writer;
         _outputDirectory = outputDirectory;
+        _generator = new ReportGenerator(categoryResolver);
     }
 
     public (string JsonPath, string HtmlPath) GenerateForToday() =>

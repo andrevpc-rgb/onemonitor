@@ -1,4 +1,5 @@
 using OneMonitor.Agent.Core.Services;
+using OneMonitor.Agent.Infrastructure.Categorization;
 using OneMonitor.Agent.Infrastructure.Persistence;
 using OneMonitor.Agent.Infrastructure.Reporting;
 using OneMonitor.Agent.Infrastructure.Time;
@@ -24,10 +25,13 @@ internal static class Program
             new SystemClock(),
             TimeSpan.FromMinutes(settings.InactivityThresholdMinutes));
 
+        var categoryResolver = CategoryRulesLoader.LoadFromFile(settings.ResolvedCategoriesConfigPath);
+
         var reportService = new DailyReportService(
             repository,
             new ReportFileWriter(),
-            settings.ResolvedReportOutputDirectory);
+            settings.ResolvedReportOutputDirectory,
+            categoryResolver);
 
         using var context = new TrayApplicationContext(
             tracker,
