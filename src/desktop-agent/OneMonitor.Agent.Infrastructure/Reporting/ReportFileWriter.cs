@@ -30,6 +30,9 @@ public class ReportFileWriter
         var rows = string.Join(Environment.NewLine, report.AppUsages.Select(a =>
             $"<tr><td>{WebUtility.HtmlEncode(a.ProcessName)}</td><td>{FormatDuration(a.Duration)}</td></tr>"));
 
+        var windowRows = string.Join(Environment.NewLine, report.WindowUsages.Select(w =>
+            $"<tr><td>{WebUtility.HtmlEncode(w.ProcessName)}</td><td>{WebUtility.HtmlEncode(w.WindowTitle)}</td><td>{FormatDuration(w.Duration)}</td></tr>"));
+
         return $$"""
             <!DOCTYPE html>
             <html lang="pt-br">
@@ -57,6 +60,13 @@ public class ReportFileWriter
                     <thead><tr><th>Aplicativo</th><th>Duração</th></tr></thead>
                     <tbody>
                     {{rows}}
+                    </tbody>
+                </table>
+                <h2>Detalhe por janela / site</h2>
+                <table>
+                    <thead><tr><th>Aplicativo</th><th>Janela / site</th><th>Duração</th></tr></thead>
+                    <tbody>
+                    {{windowRows}}
                     </tbody>
                 </table>
             </body>

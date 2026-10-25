@@ -19,9 +19,17 @@ public class ReportGenerator
             .OrderByDescending(a => a.Duration)
             .ToList();
 
+        var byWindow = active
+            .Where(r => !string.IsNullOrWhiteSpace(r.WindowTitle))
+            .GroupBy(r => (r.ProcessName, r.WindowTitle))
+            .Select(g => new WindowUsage(g.Key.ProcessName, g.Key.WindowTitle, SumDuration(g)))
+            .OrderByDescending(w => w.Duration)
+            .ToList();
+
         return new ReportData(
             date,
             byApp,
+            byWindow,
             SumDuration(active),
             SumDuration(idle),
             SumDuration(unclassified));
