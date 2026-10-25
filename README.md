@@ -45,7 +45,9 @@ Por padrão os dados ficam em `data/onemonitor.db` dentro deste repositório dur
 
 ### Sincronização com o backend (opcional, desabilitada por padrão)
 
-Edite `Sync` em `appsettings.json` (`Enabled`, `ApiBaseUrl`, `ApiKey`, `BatchSize`, `SyncIntervalSeconds`, `MaxRetries`) para apontar para o dashboard (`src/web-dashboard`) rodando em algum endereço. Sem isso configurado, o agente funciona exatamente como antes — 100% local.
+Campos em `Sync`: `Enabled`, `ApiBaseUrl` (só a URL base, com `/` no final — ex.: `https://seu-dashboard.vercel.app/`; o agente já completa com `api/sync`), `ApiKey`, `BatchSize`, `SyncIntervalSeconds`, `MaxRetries`. Sem isso configurado, o agente funciona exatamente como antes — 100% local.
+
+**`appsettings.json` é versionado e este repositório é público** — nunca coloque a `ApiKey` real nele. Em vez disso, copie [`src/desktop-agent/OneMonitor.Agent/appsettings.Local.json.example`](src/desktop-agent/OneMonitor.Agent/appsettings.Local.json.example) para `appsettings.Local.json` (gitignorado) na mesma pasta, e preencha só os campos de `Sync` que você quer sobrepor (`AppSettings.Load()` mescla os dois arquivos, com o local vencendo). O mesmo padrão existe no dashboard (`.env.local`, ver `src/web-dashboard/README.md`).
 
 ### Limitação conhecida: pasta sincronizada pelo Google Drive
 

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace OneMonitor.Agent;
 
@@ -6,6 +7,10 @@ namespace OneMonitor.Agent;
 /// Configuração carregada de appsettings.json, com defaults que priorizam o
 /// data/ do repositório em ambiente de desenvolvimento e caem para
 /// %LOCALAPPDATA%\OneMonitor fora de um checkout de desenvolvimento.
+///
+/// Um appsettings.Local.json opcional (gitignorado) sobrepõe campos individuais do
+/// appsettings.json versionado — útil para segredos (ex.: Sync.ApiKey) que não devem
+/// ir para um repositório público. Veja appsettings.Local.json.example.
 /// </summary>
 public class AppSettings
 {
@@ -42,22 +47,57 @@ public class AppSettings
             ? ReportOutputDirectory
             : Path.Combine(ResolveDataRoot(), "reports");
 
+    // Permite "// comentários" nos arquivos de configuração (ex.: appsettings.Local.json.example,
+    // que é pensado pra ser copiado direto) sem que isso derrube o parse silenciosamente.
+    private static readonly JsonDocumentOptions JsonParseOptions = new()
+    {
+        CommentHandling = JsonCommentHandling.Skip,
+        AllowTrailingCommas = true
+    };
+
     public static AppSettings Load()
     {
-        var path = Path.Combine(AppContext.BaseDirectory, "appsettings.json");
-        if (!File.Exists(path))
-        {
-            return new AppSettings();
-        }
+        var basePath = Path.Combine(AppContext.BaseDirectory, "appsettings.json");
+        var localPath = Path.Combine(AppContext.BaseDirectory, "appsettings.Local.json");
 
         try
         {
-            var json = File.ReadAllText(path);
-            return JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
+            JsonObject merged = File.Exists(basePath)
+                ? (JsonNode.Parse(File.ReadAllText(basePath), documentOptions: JsonParseOptions) as JsonObject ?? new JsonObject())
+                : new JsonObject();
+
+            if (File.Exists(localPath))
+            {
+                var local = JsonNode.Parse(File.ReadAllText(localPath), documentOptions: JsonParseOptions) as JsonObject;
+                MergeInto(merged, local);
+            }
+
+            return merged.Deserialize<AppSettings>() ?? new AppSettings();
         }
         catch (JsonException)
         {
             return new AppSettings();
+        }
+    }
+
+    /// <summary>Mescla "source" em "target", recursivamente para objetos aninhados (ex.: "Sync").</summary>
+    private static void MergeInto(JsonObject target, JsonObject? source)
+    {
+        if (source is null)
+        {
+            return;
+        }
+
+        foreach (var property in source)
+        {
+            if (property.Value is JsonObject sourceChild && target[property.Key] is JsonObject targetChild)
+            {
+                MergeInto(targetChild, sourceChild);
+            }
+            else
+            {
+                target[property.Key] = property.Value?.DeepClone();
+            }
         }
     }
 

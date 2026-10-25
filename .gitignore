@@ -26,6 +26,10 @@ data/reports/*
 !data/.gitkeep
 !data/reports/.gitkeep
 
+## Segredos locais (ver *.example versionado ao lado de cada um)
+appsettings.Local.json
+.env.local
+
 ## OS
 Thumbs.db
 .DS_Store

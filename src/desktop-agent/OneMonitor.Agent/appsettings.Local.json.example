@@ -1,0 +1,13 @@
+// Copie para appsettings.Local.json (gitignorado — nunca commitado) para sobrepor
+// campos do appsettings.json versionado. Útil sobretudo para a Sync.ApiKey: o
+// appsettings.json é público no GitHub, então segredos não devem morar nele.
+//
+// Só os campos que você quer sobrepor precisam aparecer aqui — o resto vem do
+// appsettings.json normalmente (ver AppSettings.Load() / MergeInto()).
+{
+  "Sync": {
+    "Enabled": true,
+    "ApiBaseUrl": "https://seu-dashboard.vercel.app/",
+    "ApiKey": "a-mesma-SYNC_API_KEY-configurada-no-Vercel"
+  }
+}

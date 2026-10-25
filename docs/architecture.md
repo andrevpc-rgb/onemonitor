@@ -80,7 +80,7 @@ SQLite via `Microsoft.Data.Sqlite` (sem ORM — o schema é pequeno e as queries
 
 ## Sincronização (Fase 3)
 
-Esta fase prepara o agente para enviar dados a um backend — não existe backend ainda, e a sincronização vem **desabilitada por padrão** (`Sync.Enabled: false` em `appsettings.json`). O agente continua 100% funcional offline sem ela, como nas fases anteriores.
+Esta fase prepara o agente para enviar dados a um backend. A sincronização vem **desabilitada por padrão** (`Sync.Enabled: false` em `appsettings.json`) — o agente continua 100% funcional offline sem ela; quem liga é a configuração local de cada instalação (ver nota sobre `appsettings.Local.json` logo abaixo), nunca o `appsettings.json` versionado.
 
 ### Fila offline
 
@@ -119,6 +119,10 @@ SyncBatch(DeviceId, Events)
 ### Integração no agente
 
 `TrayApplicationContext` dirige o ciclo de sync com um `System.Threading.Timer` próprio (thread de background, não o `System.Windows.Forms.Timer` do polling) — chamadas de rede não devem rodar na thread de UI. Um `Interlocked` simples evita sobrepor ciclos se uma chamada demorar mais que o intervalo configurado. O item de menu "Sincronizar agora" dispara um ciclo manual e mostra o resultado; fica desabilitado quando `Sync.Enabled` é `false`.
+
+### Segredos locais (`appsettings.Local.json`)
+
+`appsettings.json` é versionado e este repositório é público — a `Sync.ApiKey` real nunca deve morar nele. `AppSettings.Load()` lê o `appsettings.json` base e, se existir, mescla por cima um `appsettings.Local.json` (gitignorado, um por instalação) — recursivamente para objetos aninhados como `Sync`, então o arquivo local só precisa conter os campos que está sobrepondo. O parser aceita `// comentários` (`JsonCommentHandling.Skip`), para `appsettings.Local.json.example` poder ser copiado direto sem precisar editar nada além dos valores. Mesmo padrão do `.env.local` no dashboard.
 
 ## Dashboard Web e Ingestão (Fase 4)
 
