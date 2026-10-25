@@ -21,7 +21,8 @@ public class HttpSyncApiClient : ISyncApiClient
     private readonly HttpClient _httpClient;
     private readonly string _eventsPath;
 
-    public HttpSyncApiClient(HttpClient httpClient, string eventsPath = "api/sync/events")
+    // Precisa casar com o Route Handler real: src/web-dashboard/app/api/sync/route.ts (-> /api/sync).
+    public HttpSyncApiClient(HttpClient httpClient, string eventsPath = "api/sync")
     {
         _httpClient = httpClient;
         _eventsPath = eventsPath;

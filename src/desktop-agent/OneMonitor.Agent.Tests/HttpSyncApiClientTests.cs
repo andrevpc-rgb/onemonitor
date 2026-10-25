@@ -86,6 +86,21 @@ public class HttpSyncApiClientTests
         Assert.Contains("\"category\":\"Browser\"", handler.LastRequestBody);
     }
 
+    [Fact]
+    public async Task SendBatchAsync_WithDefaultPath_PostsToApiSync()
+    {
+        // Regressão: o default já foi "api/sync/events" por engano, enquanto a rota real
+        // em src/web-dashboard/app/api/sync/route.ts é "/api/sync" — sem "/events". Esse
+        // mismatch fazia todo POST devolver 404 (classificado como falha permanente), e os
+        // registros nunca saíam de pendentes. Só descobrimos testando contra o Next.js real.
+        var handler = StubHttpMessageHandler.ReturningStatus(HttpStatusCode.OK);
+        var client = CreateClient(handler);
+
+        await client.SendBatchAsync(SampleBatch, CancellationToken.None);
+
+        Assert.Equal("/api/sync", handler.LastRequest!.RequestUri!.AbsolutePath);
+    }
+
     private static HttpSyncApiClient CreateClient(HttpMessageHandler handler)
     {
         var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://example.test/") };
