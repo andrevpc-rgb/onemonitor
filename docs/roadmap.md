@@ -13,13 +13,13 @@
 
 Explicitamente **fora de escopo** na Fase 1 (não implementado): chamadas a Gemini/Claude/outras IAs, login, multiempresa, cobrança, sincronização com nuvem, capturas de tela, leitura de conteúdo de tela, execução automática de comandos, bloqueio de sites, integração com calendário, extensão de navegador.
 
-## Fase 2 — Categorias e Justificativas — em andamento neste repositório
+## Fase 2 — Categorias e Justificativas — ✅ concluída
 
 - Sistema de categorias configuráveis (processo/janela → categoria), com regras padrão em `categories.json`.
-- Detecção do retorno do usuário após período de inatividade, com pop-up (WinForms) para justificar a ausência (ex.: "Reunião Presencial", "Suporte a Colega", "Visita a Cliente", "Pausa").
-- Persistência da justificativa associada ao período de inatividade correspondente.
-- Relatório HTML/JSON com tempo por categoria e ausências justificadas (motivo, duração, ocorrências), separados do tempo inativo genérico.
-- Testes automatizados (resolução de categoria, evento de retorno de inatividade, persistência de justificativa, agregação no relatório).
+- Detecção do retorno do usuário após período de inatividade, com pop-up (WinForms) para justificar a ausência (ex.: "Reunião Presencial", "Suporte a Colega", "Visita a Cliente", "Pausa") — confirmado em teste manual.
+- Persistência da justificativa associada ao período de inatividade correspondente, com migração automática de bancos criados antes dessa coluna existir.
+- Relatório HTML/JSON com tempo por categoria, ausências justificadas (motivo, duração, ocorrências) e linha do tempo cronológica (horário local de início/fim de cada atividade), separados do tempo inativo genérico.
+- Testes automatizados (resolução de categoria, evento de retorno de inatividade, persistência de justificativa, agregação no relatório, corte de dia pelo fuso local).
 
 ## Fase 3 — Sincronização e dashboard web (futuro, não iniciado)
 
