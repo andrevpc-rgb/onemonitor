@@ -47,12 +47,15 @@ public class ReportGenerator
             .OrderByDescending(j => j.Duration)
             .ToList();
 
+        var timeline = records.OrderBy(r => r.StartTime).ToList();
+
         return new ReportData(
             date,
             byApp,
             byWindow,
             byCategory,
             byJustification,
+            timeline,
             SumDuration(active),
             SumDuration(idle),
             SumDuration(justified),

@@ -154,6 +154,28 @@ public class ReportGeneratorTests
         Assert.Equal(TimeSpan.FromMinutes(63), report.TotalIdle);
     }
 
+    [Fact]
+    public void Generate_IncludesAllRecordsInChronologicalOrder_RegardlessOfInputOrder()
+    {
+        var date = new DateOnly(2026, 1, 15);
+        var baseTime = new DateTimeOffset(2026, 1, 15, 9, 0, 0, TimeSpan.Zero);
+
+        // Propositalmente fora de ordem, para garantir que o Generate reordena.
+        var records = new List<ActivityRecord>
+        {
+            Record("chrome", ActivityType.Active, baseTime.AddMinutes(20), TimeSpan.FromMinutes(10)),
+            Record("(idle)", ActivityType.Idle, baseTime, TimeSpan.FromMinutes(20)),
+            Record("(unknown)", ActivityType.Unclassified, baseTime.AddMinutes(30), TimeSpan.FromMinutes(5))
+        };
+
+        var report = new ReportGenerator(new FakeCategoryResolver()).Generate(records, date);
+
+        Assert.Equal(3, report.Timeline.Count);
+        Assert.Equal(ActivityType.Idle, report.Timeline[0].Type);
+        Assert.Equal(ActivityType.Active, report.Timeline[1].Type);
+        Assert.Equal(ActivityType.Unclassified, report.Timeline[2].Type);
+    }
+
     private static ActivityRecord Record(string processName, ActivityType type, DateTimeOffset start, TimeSpan duration, string windowTitle = "") =>
         new()
         {

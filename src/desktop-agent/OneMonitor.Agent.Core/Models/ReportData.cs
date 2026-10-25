@@ -14,12 +14,14 @@ public sealed record CategoryUsage(string Category, TimeSpan Duration);
 /// <summary>Período(s) de inatividade justificados pelo usuário, agregados por motivo.</summary>
 public sealed record JustifiedAbsence(string Justification, TimeSpan Duration, int Occurrences);
 
+/// <param name="Timeline">Todos os registros do dia, em ordem cronológica (horário real de início/fim de cada bloco).</param>
 public sealed record ReportData(
     DateOnly Date,
     IReadOnlyList<AppUsage> AppUsages,
     IReadOnlyList<WindowUsage> WindowUsages,
     IReadOnlyList<CategoryUsage> CategoryUsages,
     IReadOnlyList<JustifiedAbsence> JustifiedAbsences,
+    IReadOnlyList<ActivityRecord> Timeline,
     TimeSpan TotalActive,
     TimeSpan TotalIdle,
     TimeSpan TotalJustified,

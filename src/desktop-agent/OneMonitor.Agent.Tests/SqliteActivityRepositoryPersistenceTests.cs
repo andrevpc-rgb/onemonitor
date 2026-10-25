@@ -67,8 +67,13 @@ public class SqliteActivityRepositoryPersistenceTests : IDisposable
     public void GetRecordsForDate_ReturnsOnlyRecordsStartingOnThatDate()
     {
         var repository = new SqliteActivityRepository(_databasePath);
-        var day1 = new DateTimeOffset(2026, 1, 15, 23, 0, 0, TimeSpan.Zero);
-        var day2 = new DateTimeOffset(2026, 1, 16, 1, 0, 0, TimeSpan.Zero);
+
+        // Meio-dia local, 24h de diferença: cai em dois dias de calendário local
+        // distintos independentemente do fuso horário da máquina que roda o teste.
+        var day1Local = new DateTime(2026, 1, 15, 12, 0, 0, DateTimeKind.Local);
+        var day2Local = new DateTime(2026, 1, 16, 12, 0, 0, DateTimeKind.Local);
+        var day1 = new DateTimeOffset(day1Local).ToUniversalTime();
+        var day2 = new DateTimeOffset(day2Local).ToUniversalTime();
 
         repository.SaveClosedRecord(new ActivityRecord
         {
@@ -79,13 +84,45 @@ public class SqliteActivityRepositoryPersistenceTests : IDisposable
             ProcessName = "b", WindowTitle = "", Type = ActivityType.Active, StartTime = day2, EndTime = day2.AddMinutes(5)
         });
 
-        var day1Records = repository.GetRecordsForDate(DateOnly.FromDateTime(day1.UtcDateTime));
-        var day2Records = repository.GetRecordsForDate(DateOnly.FromDateTime(day2.UtcDateTime));
+        var day1Records = repository.GetRecordsForDate(DateOnly.FromDateTime(day1Local));
+        var day2Records = repository.GetRecordsForDate(DateOnly.FromDateTime(day2Local));
 
         Assert.Single(day1Records);
         Assert.Equal("a", day1Records[0].ProcessName);
         Assert.Single(day2Records);
         Assert.Equal("b", day2Records[0].ProcessName);
+    }
+
+    [Fact]
+    public void GetRecordsForDate_UsesLocalCalendarDayBoundaries_NotUtcMidnight()
+    {
+        var repository = new SqliteActivityRepository(_databasePath);
+        var localDate = new DateOnly(2026, 1, 15);
+
+        var localMidnight = localDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Local);
+        var utcMidnight = new DateTimeOffset(localMidnight).ToUniversalTime();
+
+        repository.SaveClosedRecord(new ActivityRecord
+        {
+            ProcessName = "inside",
+            WindowTitle = "",
+            Type = ActivityType.Active,
+            StartTime = utcMidnight,
+            EndTime = utcMidnight.AddMinutes(1)
+        });
+        repository.SaveClosedRecord(new ActivityRecord
+        {
+            ProcessName = "before-midnight",
+            WindowTitle = "",
+            Type = ActivityType.Active,
+            StartTime = utcMidnight.AddMilliseconds(-1),
+            EndTime = utcMidnight
+        });
+
+        var records = repository.GetRecordsForDate(localDate);
+
+        var record = Assert.Single(records);
+        Assert.Equal("inside", record.ProcessName);
     }
 
     [Fact]

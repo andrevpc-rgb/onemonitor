@@ -147,7 +147,13 @@ public class SqliteActivityRepository : IActivityRepository
 
     public IReadOnlyList<ActivityRecord> GetRecordsForDate(DateOnly date)
     {
-        var start = date.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+        // "date" é um dia do calendário local do usuário (ex.: vindo de DateTime.Now),
+        // não um dia UTC. Convertemos a meia-noite local para o UTC equivalente antes de
+        // comparar com StartTime/EndTime (sempre gravados em UTC) — senão, perto da
+        // virada do dia, o relatório "de hoje" pode incluir/excluir horas erradas em
+        // fusos diferentes de UTC+0 (ex.: Brasil, UTC-3).
+        var localMidnight = date.ToDateTime(TimeOnly.MinValue, DateTimeKind.Local);
+        var start = new DateTimeOffset(localMidnight).ToUniversalTime();
         var end = start.AddDays(1);
 
         using var connection = OpenConnection();

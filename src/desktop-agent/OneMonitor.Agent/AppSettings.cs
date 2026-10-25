@@ -9,7 +9,11 @@ namespace OneMonitor.Agent;
 /// </summary>
 public class AppSettings
 {
-    public int InactivityThresholdMinutes { get; set; } = 5;
+    /// <summary>
+    /// Limite de inatividade em minutos. Aceita frações para testes (ex.: 0.25 = 15s,
+    /// 0.0833... ≈ 5s) — em produção, use um valor inteiro (padrão: 5).
+    /// </summary>
+    public double InactivityThresholdMinutes { get; set; } = 5;
 
     public int PollingIntervalSeconds { get; set; } = 2;
 

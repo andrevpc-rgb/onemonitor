@@ -39,6 +39,18 @@ public class ReportFileWriter
         var justificationRows = string.Join(Environment.NewLine, report.JustifiedAbsences.Select(j =>
             $"<tr><td>{WebUtility.HtmlEncode(j.Justification)}</td><td>{FormatDuration(j.Duration)}</td><td>{j.Occurrences}</td></tr>"));
 
+        var timelineRows = string.Join(Environment.NewLine, report.Timeline.Select(r =>
+            $"""
+            <tr>
+                <td>{FormatTimeRange(r.StartTime, r.EndTime)}</td>
+                <td>{TranslateType(r.Type)}</td>
+                <td>{WebUtility.HtmlEncode(r.ProcessName)}</td>
+                <td>{WebUtility.HtmlEncode(r.WindowTitle)}</td>
+                <td>{FormatDuration(r.Duration)}</td>
+                <td>{WebUtility.HtmlEncode(r.Justification ?? "")}</td>
+            </tr>
+            """));
+
         return $$"""
             <!DOCTYPE html>
             <html lang="pt-br">
@@ -62,6 +74,13 @@ public class ReportFileWriter
                     <span><strong>Não classificado:</strong> {{FormatDuration(report.TotalUnclassified)}}</span>
                     <span><strong>Total monitorado:</strong> {{FormatDuration(report.TotalTracked)}}</span>
                 </p>
+                <h2>Linha do tempo</h2>
+                <table>
+                    <thead><tr><th>Horário</th><th>Tipo</th><th>Aplicativo</th><th>Janela / site</th><th>Duração</th><th>Justificativa</th></tr></thead>
+                    <tbody>
+                    {{timelineRows}}
+                    </tbody>
+                </table>
                 <h2>Tempo por categoria</h2>
                 <table>
                     <thead><tr><th>Categoria</th><th>Duração</th></tr></thead>
@@ -97,4 +116,17 @@ public class ReportFileWriter
 
     private static string FormatDuration(TimeSpan duration) =>
         $"{(int)duration.TotalHours:D2}:{duration.Minutes:D2}:{duration.Seconds:D2}";
+
+    // Os registros são armazenados em UTC; aqui convertemos para o horário local da
+    // máquina (o mesmo fuso em que o usuário realmente viveu aquele período).
+    private static string FormatTimeRange(DateTimeOffset start, DateTimeOffset end) =>
+        $"{start.ToLocalTime():HH:mm:ss} – {end.ToLocalTime():HH:mm:ss}";
+
+    private static string TranslateType(ActivityType type) => type switch
+    {
+        ActivityType.Active => "Ativo",
+        ActivityType.Idle => "Inativo",
+        ActivityType.Unclassified => "Não classificado",
+        _ => type.ToString()
+    };
 }
