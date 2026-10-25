@@ -13,7 +13,8 @@ public sealed record ActivitySyncEvent(
     string Type,
     DateTimeOffset StartTime,
     DateTimeOffset EndTime,
-    string? Justification);
+    string? Justification,
+    string Category);
 
 /// <summary>Um lote de eventos enviado em uma única requisição de sincronização.</summary>
 public sealed record SyncBatch(string DeviceId, IReadOnlyList<ActivitySyncEvent> Events);

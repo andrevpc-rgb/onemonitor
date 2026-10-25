@@ -16,7 +16,8 @@ public class HttpSyncApiClientTests
             new("evt-1", "device-1", "chrome", "Tab", "Active",
                 new DateTimeOffset(2026, 1, 15, 9, 0, 0, TimeSpan.Zero),
                 new DateTimeOffset(2026, 1, 15, 9, 5, 0, TimeSpan.Zero),
-                null)
+                null,
+                "Browser")
         });
 
     [Fact]
@@ -82,6 +83,7 @@ public class HttpSyncApiClientTests
         Assert.Contains("\"deviceId\":\"device-1\"", handler.LastRequestBody);
         Assert.Contains("\"eventId\":\"evt-1\"", handler.LastRequestBody);
         Assert.Contains("\"processName\":\"chrome\"", handler.LastRequestBody);
+        Assert.Contains("\"category\":\"Browser\"", handler.LastRequestBody);
     }
 
     private static HttpSyncApiClient CreateClient(HttpMessageHandler handler)

@@ -106,11 +106,11 @@ Quando há mais pendências do que cabem em um lote, cada ciclo processa só um 
 ### Contratos da API (`Core/Models/SyncModels.cs`)
 
 ```csharp
-ActivitySyncEvent(EventId, DeviceId, ProcessName, WindowTitle, Type, StartTime, EndTime, Justification)
+ActivitySyncEvent(EventId, DeviceId, ProcessName, WindowTitle, Type, StartTime, EndTime, Justification, Category)
 SyncBatch(DeviceId, Events)
 ```
 
-`Type` vai como texto (`"Active"`/`"Idle"`/`"Unclassified"`), não o enum numérico — mantém o contrato estável independente de como o enum evoluir no agente.
+`Type` vai como texto (`"Active"`/`"Idle"`/`"Unclassified"`), não o enum numérico — mantém o contrato estável independente de como o enum evoluir no agente. `Category` (adicionado na Fase 4) é resolvida pelo `SyncService` via o mesmo `ICategoryResolver` usado nos relatórios locais (Fase 2) — o backend nunca precisa reimplementar a lógica de categorização.
 
 ### Implementação HTTP (Infrastructure) e identidade do dispositivo
 
@@ -120,8 +120,30 @@ SyncBatch(DeviceId, Events)
 
 `TrayApplicationContext` dirige o ciclo de sync com um `System.Threading.Timer` próprio (thread de background, não o `System.Windows.Forms.Timer` do polling) — chamadas de rede não devem rodar na thread de UI. Um `Interlocked` simples evita sobrepor ciclos se uma chamada demorar mais que o intervalo configurado. O item de menu "Sincronizar agora" dispara um ciclo manual e mostra o resultado; fica desabilitado quando `Sync.Enabled` é `false`.
 
+## Dashboard Web e Ingestão (Fase 4)
+
+Detalhes de configuração e scripts ficam em [`src/web-dashboard/README.md`](../src/web-dashboard/README.md); aqui só o desenho.
+
+### Schema no Supabase (`docs/supabase_schema.sql`)
+
+Duas tabelas: `devices` (um registro por `DeviceId` do agente) e `usage_events` (um registro por `ActivitySyncEvent` recebido). `event_id` é `unique` — upsert por esse campo é o mecanismo de deduplicação do lado do servidor, espelhando o `EventId` que o agente já usa para merges locais. `duration_seconds` é uma coluna **gerada** (`ended_at - started_at`), nunca confiada ao cliente. RLS está ativado nas duas tabelas **sem nenhuma policy permissiva** — só a `service_role key` (usada exclusivamente no servidor Next.js) consegue acessar; isso bloqueia leitura/escrita anônima por padrão até a Fase 5 definir policies por usuário, em vez de liberar tudo e restringir depois.
+
+### Ingestão (`src/web-dashboard/app/api/sync/route.ts`)
+
+Recebe o `SyncBatch` do agente, valida o header `X-Api-Key` contra uma env var do servidor, e faz upsert em `devices`/`usage_events` via `@supabase/supabase-js` com a service-role key. Os códigos de status devolvidos espelham deliberadamente a classificação que `HttpSyncApiClient` já faz do lado do agente (2xx sucesso, 4xx permanente, 5xx transitório) — nenhuma mudança foi necessária no agente para a Fase 4 funcionar.
+
+### Dashboard (`app/page.tsx`)
+
+Visão única (sem seleção de usuário/dispositivo — Fase 5), últimas 24h, agregando `usage_events` por aplicativo, por categoria, e listando ausências justificadas. Next.js 16 introduziu "Cache Components" (toda rota é estática por padrão); a busca no Supabase fica isolada num Server Component dentro de um `<Suspense>`, com `await connection()` sinalizando explicitamente que depende de dados por requisição — isso permite `next build` gerar a casca estática da página sem exigir credenciais reais do Supabase no momento do build.
+
+Os gráficos (`components/AppUsageChart.tsx`, `CategoryBreakdownChart.tsx`) seguem o skill de dataviz do projeto: comparação de magnitude vira barra com hue sequencial único; parte-todo com poucas categorias vira uma única barra empilhada horizontal com cores categóricas em ordem fixa (paleta validada contra os seis checks de acessibilidade do skill — contraste, separação para daltonismo, etc.) — nunca pizza.
+
+### Contrato TypeScript ↔ C#
+
+`src/web-dashboard/lib/sync/contracts.ts` e `lib/supabase/types.ts` espelham manualmente `ActivitySyncEvent`/`SyncBatch` do C#. Não há geração automática entre os dois ecossistemas — qualquer mudança de contrato precisa ser replicada nos dois lados (e os testes de cada lado atualizados).
+
 ## Extensibilidade para fases futuras
 
-- A Fase 4 (backend + dashboard) consome `SyncBatch`/`ActivitySyncEvent` do lado do servidor — o contrato já existe e é versionável independentemente do schema do SQLite local.
-- `ReportData` é um modelo plano, serializável, que pode ser reaproveitado por um dashboard web ou por uma camada de insights de IA (Fase 5) sem reprocessar os dados brutos.
-- A IA nunca entra no caminho de `ActivityTracker`/`IdleTimeProvider`/`ActiveWindowProvider` — qualquer uso futuro de IA consome `ReportData`/registros já consolidados, nunca o loop de monitoramento em tempo real.
+- `ReportData` é um modelo plano, serializável, que pode ser reaproveitado por uma camada de insights de IA (Fase 6) sem reprocessar os dados brutos.
+- A IA nunca entra no caminho de `ActivityTracker`/`IdleTimeProvider`/`ActiveWindowProvider` — qualquer uso futuro de IA consome `ReportData`/`usage_events` já consolidados, nunca o loop de monitoramento em tempo real.
+- A Fase 5 (login/multiempresa) adiciona policies de RLS por usuário no Supabase e um seletor de dispositivo/período no dashboard — nenhuma mudança de schema além de novas policies e, possivelmente, uma tabela de usuários/organizações.

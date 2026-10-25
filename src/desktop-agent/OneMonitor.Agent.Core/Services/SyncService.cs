@@ -15,6 +15,7 @@ public class SyncService
     private readonly ISyncApiClient _apiClient;
     private readonly IClock _clock;
     private readonly IAsyncDelay _delay;
+    private readonly ICategoryResolver _categoryResolver;
     private readonly string _deviceId;
     private readonly int _batchSize;
     private readonly int _maxRetries;
@@ -24,6 +25,7 @@ public class SyncService
         ISyncApiClient apiClient,
         IClock clock,
         IAsyncDelay delay,
+        ICategoryResolver categoryResolver,
         string deviceId,
         int batchSize = 50,
         int maxRetries = 3)
@@ -32,6 +34,7 @@ public class SyncService
         _apiClient = apiClient;
         _clock = clock;
         _delay = delay;
+        _categoryResolver = categoryResolver;
         _deviceId = deviceId;
         _batchSize = batchSize;
         _maxRetries = maxRetries;
@@ -91,5 +94,6 @@ public class SyncService
         record.Type.ToString(),
         record.StartTime,
         record.EndTime,
-        record.Justification);
+        record.Justification,
+        _categoryResolver.Resolve(record.ProcessName, record.WindowTitle));
 }

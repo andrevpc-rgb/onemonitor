@@ -13,7 +13,7 @@ public class SyncServiceTests
     {
         var repository = new InMemoryActivityRepository();
         var apiClient = new FakeSyncApiClient();
-        var service = new SyncService(repository, apiClient, new ManualClock(DateTimeOffset.UtcNow), new FakeAsyncDelay(), "device-1");
+        var service = new SyncService(repository, apiClient, new ManualClock(DateTimeOffset.UtcNow), new FakeAsyncDelay(), new FakeCategoryResolver(), "device-1");
 
         var result = await service.SyncPendingAsync();
 
@@ -35,7 +35,8 @@ public class SyncServiceTests
 
         var apiClient = new FakeSyncApiClient(SyncResponse.Success());
         var clock = new ManualClock(start.AddHours(1));
-        var service = new SyncService(repository, apiClient, clock, new FakeAsyncDelay(), "device-1");
+        var categoryResolver = new FakeCategoryResolver(new Dictionary<string, string> { ["chrome"] = "Navegação" });
+        var service = new SyncService(repository, apiClient, clock, new FakeAsyncDelay(), categoryResolver, "device-1");
 
         var result = await service.SyncPendingAsync();
 
@@ -47,6 +48,7 @@ public class SyncServiceTests
         Assert.Equal("device-1", batch.DeviceId);
         var sentEvent = Assert.Single(batch.Events);
         Assert.Equal("evt-1", sentEvent.EventId);
+        Assert.Equal("Navegação", sentEvent.Category);
         Assert.Equal("chrome", sentEvent.ProcessName);
         Assert.Equal("Active", sentEvent.Type);
     }
@@ -62,7 +64,7 @@ public class SyncServiceTests
         });
 
         var apiClient = new FakeSyncApiClient(SyncResponse.Permanent("401 Unauthorized"));
-        var service = new SyncService(repository, apiClient, new ManualClock(DateTimeOffset.UtcNow), new FakeAsyncDelay(), "device-1", maxRetries: 3);
+        var service = new SyncService(repository, apiClient, new ManualClock(DateTimeOffset.UtcNow), new FakeAsyncDelay(), new FakeCategoryResolver(), "device-1", maxRetries: 3);
 
         var result = await service.SyncPendingAsync();
 
@@ -83,7 +85,7 @@ public class SyncServiceTests
 
         var apiClient = new FakeSyncApiClient { DefaultResponse = SyncResponse.Transient("timeout") };
         var delay = new FakeAsyncDelay();
-        var service = new SyncService(repository, apiClient, new ManualClock(DateTimeOffset.UtcNow), delay, "device-1", maxRetries: 3);
+        var service = new SyncService(repository, apiClient, new ManualClock(DateTimeOffset.UtcNow), delay, new FakeCategoryResolver(), "device-1", maxRetries: 3);
 
         var result = await service.SyncPendingAsync();
 
@@ -105,7 +107,7 @@ public class SyncServiceTests
 
         var apiClient = new FakeSyncApiClient(SyncResponse.Transient("timeout"), SyncResponse.Success());
         var delay = new FakeAsyncDelay();
-        var service = new SyncService(repository, apiClient, new ManualClock(DateTimeOffset.UtcNow), delay, "device-1", maxRetries: 3);
+        var service = new SyncService(repository, apiClient, new ManualClock(DateTimeOffset.UtcNow), delay, new FakeCategoryResolver(), "device-1", maxRetries: 3);
 
         var result = await service.SyncPendingAsync();
 
@@ -134,7 +136,7 @@ public class SyncServiceTests
         }
 
         var apiClient = new FakeSyncApiClient(SyncResponse.Success());
-        var service = new SyncService(repository, apiClient, new ManualClock(start.AddHours(1)), new FakeAsyncDelay(), "device-1", batchSize: 2);
+        var service = new SyncService(repository, apiClient, new ManualClock(start.AddHours(1)), new FakeAsyncDelay(), new FakeCategoryResolver(), "device-1", batchSize: 2);
 
         var result = await service.SyncPendingAsync();
 

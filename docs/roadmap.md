@@ -48,20 +48,42 @@ offline sem ela, como nas fases anteriores.
 Explicitamente fora do escopo desta fase: o backend/API em si, dashboard web, login de
 usuário final — ficam para quando esse trabalho for decidido explicitamente.
 
-## Fase 4 — Backend, Dashboard Web e Multiempresa (futuro, não iniciado)
+## Fase 4 — Dashboard Web e Ingestão no Supabase — ✅ concluída
 
-- API/backend que recebe os lotes enviados pelo agente (Fase 3) e os persiste.
-- Dashboard web para o usuário e para gestores visualizarem relatórios.
-- Autenticação/login.
+Escopo: backend de ingestão (Supabase/Postgres) + dashboard web de leitura, ambos sem
+autenticação de usuário final ainda (isso é Fase 5) — visão única, não multi-tenant.
+
+- `docs/supabase_schema.sql`: tabelas `devices` e `usage_events` (schema Postgres), com
+  `event_id` único para deduplicação (mesmo `EventId` que o agente já gera na Fase 3) e
+  `duration_seconds` como coluna gerada (nunca confiar em duração calculada no cliente).
+  RLS ativado nas duas tabelas, **sem policies permissivas** — só a `service_role key`
+  (usada no servidor Next.js) acessa; acesso anônimo fica bloqueado até a Fase 5 definir
+  policies por usuário.
+- Extensão de contrato no agente: `ActivitySyncEvent` ganha `Category` (resolvida via o
+  `ICategoryResolver` que já existia desde a Fase 2), para a tabela `usage_events` ter
+  `category_name` sem duplicar a lógica de categorização em TypeScript.
+- `src/web-dashboard/`: projeto Next.js (TypeScript + Tailwind + App Router).
+  - `app/api/sync/route.ts`: endpoint de ingestão que recebe o `SyncBatch` do agente C#,
+    valida a API key (header `X-Api-Key`), faz upsert em `devices`/`usage_events` via
+    `@supabase/supabase-js` (service-role key, só no servidor) e devolve status HTTP
+    alinhado ao que `HttpSyncApiClient` já espera (2xx sucesso, 4xx permanente, 5xx
+    transitório) — nenhuma mudança necessária na classificação de erros do agente.
+  - Dashboard (visão única, dia atual): gráfico de tempo ativo por aplicativo, distribuição
+    de tempo por categoria e tabela de ausências justificadas.
+
+## Fase 5 — Autenticação, Multiempresa e Gestão (futuro, não iniciado)
+
+- Login de usuário final; policies de RLS por usuário/dispositivo no Supabase.
 - Multi-tenancy (empresas, equipes, gestores), papéis e permissões (usuário vs. gestor).
+- Seletor de dispositivo/período no dashboard (hoje ele mostra uma visão única do dia atual).
 - Cobrança/planos.
 
-## Fase 5 — Insights com IA (futuro, não iniciado)
+## Fase 6 — Insights com IA (futuro, não iniciado)
 
 - IA aplicada **somente sobre dados já consolidados** (nunca em tempo real, nunca controlando mouse/teclado/computador): resumos, comparações, sugestões de produtividade.
 - Nenhum uso de "computer use" como mecanismo de produto.
 
-## Fase 6 — Extensões (futuro, não iniciado)
+## Fase 7 — Extensões (futuro, não iniciado)
 
 - Extensão de navegador (contexto complementar de abas/sites, com os mesmos princípios de privacidade).
 - Integração com calendário.

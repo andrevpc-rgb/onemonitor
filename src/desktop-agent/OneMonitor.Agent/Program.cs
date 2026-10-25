@@ -1,3 +1,4 @@
+using OneMonitor.Agent.Core.Abstractions;
 using OneMonitor.Agent.Core.Services;
 using OneMonitor.Agent.Infrastructure.Categorization;
 using OneMonitor.Agent.Infrastructure.Persistence;
@@ -34,7 +35,7 @@ internal static class Program
             settings.ResolvedReportOutputDirectory,
             categoryResolver);
 
-        var syncService = BuildSyncServiceIfEnabled(settings, repository);
+        var syncService = BuildSyncServiceIfEnabled(settings, repository, categoryResolver);
 
         using var context = new TrayApplicationContext(
             tracker,
@@ -46,7 +47,10 @@ internal static class Program
         Application.Run(context);
     }
 
-    private static SyncService? BuildSyncServiceIfEnabled(AppSettings settings, SqliteActivityRepository repository)
+    private static SyncService? BuildSyncServiceIfEnabled(
+        AppSettings settings,
+        SqliteActivityRepository repository,
+        ICategoryResolver categoryResolver)
     {
         if (!settings.Sync.Enabled)
         {
@@ -66,6 +70,7 @@ internal static class Program
             apiClient,
             new SystemClock(),
             new TaskDelay(),
+            categoryResolver,
             deviceId,
             settings.Sync.BatchSize,
             settings.Sync.MaxRetries);

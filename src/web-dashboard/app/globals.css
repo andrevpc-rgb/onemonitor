@@ -1,0 +1,76 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f9f9f7;
+  --foreground: #0b0b0b;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0d0d0d;
+    --foreground: #ffffff;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+/*
+ * Tokens de visualização de dados (skill "dataviz"): paleta categórica validada
+ * (ordem fixa, não ciclar), hue sequencial (azul) e tokens de texto/superfície.
+ * Escopados em .viz-root para não vazar para o resto da página.
+ */
+.viz-root {
+  color-scheme: light;
+  --viz-surface: #fcfcfb;
+  --viz-text-primary: #0b0b0b;
+  --viz-text-secondary: #52514e;
+  --viz-text-muted: #898781;
+  --viz-gridline: #e1e0d9;
+  --viz-baseline: #c3c2b7;
+
+  --viz-sequential: #2a78d6; /* azul, step 450 — magnitude (tempo por app) */
+
+  /* Categórico: ordem fixa, slots 1–5 (ver color-formula.md) */
+  --viz-series-1: #2a78d6; /* blue */
+  --viz-series-2: #eb6834; /* orange */
+  --viz-series-3: #1baf7a; /* aqua */
+  --viz-series-4: #eda100; /* yellow */
+  --viz-series-5: #e87ba4; /* magenta */
+  --viz-series-6: #008300; /* green */
+  --viz-series-7: #4a3aa7; /* violet */
+  --viz-series-8: #e34948; /* red */
+}
+
+@media (prefers-color-scheme: dark) {
+  .viz-root {
+    color-scheme: dark;
+    --viz-surface: #1a1a19;
+    --viz-text-primary: #ffffff;
+    --viz-text-secondary: #c3c2b7;
+    --viz-text-muted: #898781;
+    --viz-gridline: #2c2c2a;
+    --viz-baseline: #383835;
+
+    --viz-sequential: #3987e5;
+
+    --viz-series-1: #3987e5;
+    --viz-series-2: #d95926;
+    --viz-series-3: #199e70;
+    --viz-series-4: #c98500;
+    --viz-series-5: #d55181;
+    --viz-series-6: #008300;
+    --viz-series-7: #9085e9;
+    --viz-series-8: #e66767;
+  }
+}
