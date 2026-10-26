@@ -16,5 +16,18 @@ public sealed record ActivitySyncEvent(
     string? Justification,
     string Category);
 
+/// <summary>
+/// Sinal de vida do agente. "Started" (uma vez, ao iniciar) e "Stopped" (ao encerrar pela
+/// bandeja) são explícitos; "Heartbeat" acompanha todo ciclo periódico de sincronização,
+/// mesmo quando não há atividade pendente — é isso que deixa o backend saber que o agente
+/// continua rodando, não só que ele tem dados novos.
+/// </summary>
+public sealed record DeviceStatusEvent(string State, DateTimeOffset Timestamp)
+{
+    public const string Started = "Started";
+    public const string Heartbeat = "Heartbeat";
+    public const string Stopped = "Stopped";
+}
+
 /// <summary>Um lote de eventos enviado em uma única requisição de sincronização.</summary>
-public sealed record SyncBatch(string DeviceId, IReadOnlyList<ActivitySyncEvent> Events);
+public sealed record SyncBatch(string DeviceId, IReadOnlyList<ActivitySyncEvent> Events, DeviceStatusEvent? Status = null);

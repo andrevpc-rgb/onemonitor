@@ -1,11 +1,14 @@
 /** Espelho das tabelas de docs/supabase_schema.sql. Mantido à mão (sem geração automática). */
 
+export type DeviceStatus = "online" | "offline" | "stopped";
+
 export interface DeviceRow {
   id: string;
   device_id: string;
   hostname: string | null;
   first_seen_at: string;
   last_seen_at: string;
+  status: DeviceStatus;
 }
 
 export interface UsageEventRow {

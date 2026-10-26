@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { isValidSyncBatch, type SyncBatch } from "@/lib/sync/contracts";
-import type { UsageEventInsert } from "@/lib/supabase/types";
+import { isValidSyncBatch, type DeviceStatusState, type SyncBatch } from "@/lib/sync/contracts";
+import type { DeviceStatus, UsageEventInsert } from "@/lib/supabase/types";
 
 /**
  * Ingestão de lotes enviados pelo agente desktop C# (SyncService -> HttpSyncApiClient).
@@ -39,12 +39,17 @@ export async function POST(request: Request) {
   const batch: SyncBatch = payload;
   const supabase = createSupabaseServerClient();
 
+  const deviceUpsert: { device_id: string; last_seen_at: string; status?: DeviceStatus } = {
+    device_id: batch.deviceId,
+    last_seen_at: new Date().toISOString(),
+  };
+  if (batch.status) {
+    deviceUpsert.status = toDeviceStatus(batch.status.state);
+  }
+
   const { error: deviceError } = await supabase
     .from("devices")
-    .upsert(
-      { device_id: batch.deviceId, last_seen_at: new Date().toISOString() },
-      { onConflict: "device_id" },
-    );
+    .upsert(deviceUpsert, { onConflict: "device_id" });
 
   if (deviceError) {
     return NextResponse.json({ error: deviceError.message }, { status: 500 });
@@ -78,4 +83,13 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.json({ received: batch.events.length, upserted: count ?? batch.events.length });
+}
+
+/**
+ * "Started"/"Heartbeat" -> online, "Stopped" -> stopped. "offline" nunca é escrito pelo
+ * agente — fica reservado para uma leitura futura que note um last_seen_at parado há
+ * muito tempo (ver docs/supabase_schema.sql).
+ */
+function toDeviceStatus(state: DeviceStatusState): DeviceStatus {
+  return state === "Stopped" ? "stopped" : "online";
 }

@@ -1,12 +1,15 @@
--- OneMonitor — schema de ingestão (Supabase/Postgres), Fase 4.
+-- OneMonitor — schema de ingestão (Supabase/Postgres), Fases 4-5.
 --
 -- Escopo: receber os lotes (SyncBatch) que o agente desktop C# envia via
--- src/web-dashboard/app/api/sync/route.ts. Não há login de usuário final ainda (Fase 5) —
--- por isso RLS fica ativado SEM policies permissivas: só a service_role key (usada no
--- servidor Next.js, nunca no navegador) consegue ler/escrever. Isso bloqueia qualquer
--- acesso anônimo por padrão, em vez de liberar tudo até existir um dono de linha real.
+-- src/web-dashboard/app/api/sync/route.ts, incluindo os sinais de vida (status) da Fase 5.
+-- Não há login de usuário final ainda (Fase 6) — por isso RLS fica ativado SEM policies
+-- permissivas: só a service_role key (usada no servidor Next.js, nunca no navegador)
+-- consegue ler/escrever. Isso bloqueia qualquer acesso anônimo por padrão, em vez de
+-- liberar tudo até existir um dono de linha real.
 --
--- Rode este script no SQL Editor do Supabase (ou via `supabase db push`).
+-- Script idempotente: seguro rodar de novo em um banco onde uma versão anterior (Fase 4)
+-- já rodou — ver a seção de migração perto do fim. Rode no SQL Editor do Supabase (ou via
+-- `supabase db push`).
 
 create extension if not exists "pgcrypto"; -- gen_random_uuid()
 
@@ -19,7 +22,13 @@ create table if not exists public.devices (
     device_id      text not null unique,
     hostname       text,
     first_seen_at  timestamptz not null default now(),
-    last_seen_at   timestamptz not null default now()
+    last_seen_at   timestamptz not null default now(),
+
+    -- Fase 5: último sinal de vida autodeclarado pelo agente. 'offline' é o default de uma
+    -- linha nova mas nunca é escrito pelo agente depois disso — ele só declara 'online'
+    -- (Started/Heartbeat) e 'stopped' (encerrado pela bandeja); detectar "não dá heartbeat
+    -- há muito tempo" é lógica de leitura futura (Fase 7), não um valor gravado aqui.
+    status         text not null default 'offline' check (status in ('online', 'offline', 'stopped'))
 );
 
 comment on table public.devices is
@@ -106,5 +115,17 @@ alter table public.usage_events enable row level security;
 -- as roles anon/authenticated não conseguem ler nem escrever nada. Só a service_role key
 -- (que ignora RLS por definição no Postgres/Supabase) acessa estas tabelas — e ela só deve
 -- ser usada em código server-side (app/api/sync/route.ts, Server Components), nunca
--- exposta ao navegador. Quando a Fase 5 adicionar login, troque isto por policies que
+-- exposta ao navegador. Quando a Fase 6 adicionar login, troque isto por policies que
 -- filtrem por auth.uid()/dono do dispositivo.
+
+-- ---------------------------------------------------------------------------
+-- Migração Fase 5 — idempotente: se você já rodou este script antes da Fase 5
+-- (devices sem a coluna status), isto preenche a lacuna sem recriar nada.
+-- Rodar de novo depois que status já existe é um no-op seguro.
+-- ---------------------------------------------------------------------------
+alter table public.devices
+    add column if not exists status text not null default 'offline';
+
+alter table public.devices drop constraint if exists devices_status_check;
+alter table public.devices
+    add constraint devices_status_check check (status in ('online', 'offline', 'stopped'));

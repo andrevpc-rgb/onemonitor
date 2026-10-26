@@ -1,4 +1,5 @@
 using System.Threading;
+using OneMonitor.Agent.Core.Models;
 using OneMonitor.Agent.Core.Services;
 using OneMonitor.Agent.Infrastructure.Reporting;
 
@@ -70,6 +71,11 @@ public sealed class TrayApplicationContext : ApplicationContext
             // devem rodar na thread de UI, sob risco de travar o ícone/menu enquanto aguardam.
             var intervalMs = (int)syncInterval.TotalMilliseconds;
             _syncTimer = new System.Threading.Timer(OnSyncTimerTick, null, intervalMs, intervalMs);
+
+            // Fire-and-forget: um "Started" que falhar não deve impedir o agente de iniciar;
+            // o próximo Heartbeat (ver SyncService.SyncPendingAsync) já cobre o caso de rede
+            // instável logo na largada.
+            _ = SendStatusSafeAsync(DeviceStatusEvent.Started);
         }
     }
 
@@ -186,11 +192,35 @@ public sealed class TrayApplicationContext : ApplicationContext
             MessageBoxIcon.Information);
     }
 
-    private void OnExitClicked(object? sender, EventArgs e)
+    private async void OnExitClicked(object? sender, EventArgs e)
     {
         _tracker.Flush();
+
+        // Melhor esforço, com timeout curto: se o backend estiver fora do ar, o agente
+        // precisa conseguir fechar mesmo assim — "Stopped" não pode travar o encerramento.
+        await SendStatusSafeAsync(DeviceStatusEvent.Stopped, TimeSpan.FromSeconds(3));
+
         _trayIcon.Visible = false;
         ExitThread();
+    }
+
+    private async Task SendStatusSafeAsync(string state, TimeSpan? timeout = null)
+    {
+        if (_syncService is null)
+        {
+            return;
+        }
+
+        try
+        {
+            using var cts = timeout is { } t ? new CancellationTokenSource(t) : new CancellationTokenSource();
+            await _syncService.SendStatusAsync(state, cts.Token);
+        }
+        catch (Exception)
+        {
+            // Melhor esforço: um "Started"/"Stopped" que falha não deve derrubar o agente nem
+            // travar o fechamento — o próximo Heartbeat bem-sucedido já reflete o estado atual.
+        }
     }
 
     // NotifyIcon.Text aceita no máximo 63 caracteres.

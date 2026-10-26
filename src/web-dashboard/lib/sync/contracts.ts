@@ -9,6 +9,9 @@
 /** "Active" | "Idle" | "Unclassified" — ActivityType do agente, como texto. */
 export type ActivityTypeName = "Active" | "Idle" | "Unclassified";
 
+/** "Started" (ao iniciar) | "Heartbeat" (a cada ciclo periódico) | "Stopped" (ao encerrar). */
+export type DeviceStatusState = "Started" | "Heartbeat" | "Stopped";
+
 export interface ActivitySyncEvent {
   eventId: string;
   deviceId: string;
@@ -21,15 +24,28 @@ export interface ActivitySyncEvent {
   category: string;
 }
 
+export interface DeviceStatusEvent {
+  state: DeviceStatusState;
+  timestamp: string; // ISO 8601
+}
+
 export interface SyncBatch {
   deviceId: string;
   events: ActivitySyncEvent[];
+  /** Opcional — Fase 5. Sinal de vida do agente, independente de haver atividade pendente. */
+  status?: DeviceStatusEvent;
 }
 
 const VALID_TYPES: ReadonlySet<string> = new Set<ActivityTypeName>([
   "Active",
   "Idle",
   "Unclassified",
+]);
+
+const VALID_STATUS_STATES: ReadonlySet<string> = new Set<DeviceStatusState>([
+  "Started",
+  "Heartbeat",
+  "Stopped",
 ]);
 
 /**
@@ -46,11 +62,11 @@ export function isValidSyncBatch(value: unknown): value is SyncBatch {
     return false;
   }
 
-  if (!Array.isArray(batch.events)) {
+  if (!Array.isArray(batch.events) || !batch.events.every(isValidSyncEvent)) {
     return false;
   }
 
-  return batch.events.every(isValidSyncEvent);
+  return batch.status === undefined || isValidDeviceStatusEvent(batch.status);
 }
 
 function isValidSyncEvent(value: unknown): value is ActivitySyncEvent {
@@ -71,5 +87,18 @@ function isValidSyncEvent(value: unknown): value is ActivitySyncEvent {
     typeof event.endTime === "string" &&
     (event.justification === null || typeof event.justification === "string") &&
     typeof event.category === "string"
+  );
+}
+
+function isValidDeviceStatusEvent(value: unknown): value is DeviceStatusEvent {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const status = value as Record<string, unknown>;
+  return (
+    typeof status.state === "string" &&
+    VALID_STATUS_STATES.has(status.state) &&
+    typeof status.timestamp === "string"
   );
 }

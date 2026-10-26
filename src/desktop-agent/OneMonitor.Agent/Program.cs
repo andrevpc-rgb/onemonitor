@@ -18,6 +18,9 @@ internal static class Program
 
         var settings = AppSettings.Load();
 
+        IAutostartManager autostartManager = new WindowsAutostartManager("OneMonitor", WindowsAutostartManager.BuildAutostartCommand);
+        autostartManager.SyncTo(settings.Autostart.Enabled);
+
         var repository = new SqliteActivityRepository(settings.ResolvedDatabasePath);
 
         var tracker = new ActivityTracker(

@@ -30,6 +30,8 @@ public class AppSettings
 
     public SyncSettings Sync { get; set; } = new();
 
+    public AutostartSettings Autostart { get; set; } = new();
+
     public string ResolvedCategoriesConfigPath =>
         !string.IsNullOrWhiteSpace(CategoriesConfigPath)
             ? CategoriesConfigPath
@@ -156,4 +158,10 @@ public class SyncSettings
     public int SyncIntervalSeconds { get; set; } = 60;
 
     public int MaxRetries { get; set; } = 3;
+}
+
+/// <summary>Controla se o agente se registra para iniciar junto com o Windows. Desabilitado por padrão.</summary>
+public class AutostartSettings
+{
+    public bool Enabled { get; set; }
 }

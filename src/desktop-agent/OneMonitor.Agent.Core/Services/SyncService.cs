@@ -41,28 +41,47 @@ public class SyncService
     }
 
     /// <summary>
-    /// Processa um único lote de registros pendentes (no máximo <c>batchSize</c>). Quando há
-    /// mais pendências do que cabem em um lote, ciclos subsequentes (chamados periodicamente
-    /// pelo host) drenam o restante — isso evita que um backlog grande trave uma única chamada.
+    /// Processa um único lote de registros pendentes (no máximo <c>batchSize</c>). Sempre
+    /// chama a API — mesmo sem pendências — carregando um <see cref="DeviceStatusEvent.Heartbeat"/>:
+    /// é esse ping periódico (lote vazio ou não) que deixa o backend saber que o agente
+    /// continua rodando, não só que ele tem dados novos. Quando há mais pendências do que
+    /// cabem em um lote, ciclos subsequentes (chamados periodicamente pelo host) drenam o
+    /// restante — isso evita que um backlog grande trave uma única chamada.
     /// </summary>
     public async Task<SyncCycleResult> SyncPendingAsync(CancellationToken cancellationToken = default)
     {
         var pending = _repository.GetPendingSyncRecords(_batchSize);
-        if (pending.Count == 0)
-        {
-            return SyncCycleResult.NoPendingEvents;
-        }
+        var status = new DeviceStatusEvent(DeviceStatusEvent.Heartbeat, _clock.UtcNow);
+        var batch = new SyncBatch(_deviceId, pending.Select(ToEvent).ToList(), status);
 
-        var batch = new SyncBatch(_deviceId, pending.Select(ToEvent).ToList());
         var response = await SendWithRetryAsync(batch, cancellationToken);
 
         if (response.Outcome == SyncOutcome.Success)
         {
-            _repository.MarkSynced(pending.Select(r => r.Id).ToList(), _clock.UtcNow);
+            if (pending.Count > 0)
+            {
+                _repository.MarkSynced(pending.Select(r => r.Id).ToList(), _clock.UtcNow);
+            }
+
             return SyncCycleResult.Synced(pending.Count);
         }
 
         return SyncCycleResult.Failed(response.Error);
+    }
+
+    /// <summary>
+    /// Envia só um sinal de status (sem eventos de atividade) — usado para "Started" (ao
+    /// iniciar) e "Stopped" (ao encerrar pela bandeja). Reaproveita a mesma retentativa com
+    /// backoff do ciclo normal de sincronização.
+    /// </summary>
+    public async Task<SyncCycleResult> SendStatusAsync(string state, CancellationToken cancellationToken = default)
+    {
+        var batch = new SyncBatch(_deviceId, Array.Empty<ActivitySyncEvent>(), new DeviceStatusEvent(state, _clock.UtcNow));
+        var response = await SendWithRetryAsync(batch, cancellationToken);
+
+        return response.Outcome == SyncOutcome.Success
+            ? SyncCycleResult.Synced(0)
+            : SyncCycleResult.Failed(response.Error);
     }
 
     private async Task<SyncResponse> SendWithRetryAsync(SyncBatch batch, CancellationToken cancellationToken)
