@@ -129,3 +129,96 @@ alter table public.devices
 alter table public.devices drop constraint if exists devices_status_check;
 alter table public.devices
     add constraint devices_status_check check (status in ('online', 'offline', 'stopped'));
+
+-- ---------------------------------------------------------------------------
+-- Migração Fase 6 — Autenticação, multi-tenancy e gestão de organizações.
+--
+-- Até aqui (Fases 4-5) só existia a service_role key: um único "dono" de todos os
+-- dispositivos/eventos, sem usuário final. A partir daqui cada organização tem sua própria
+-- api_key (substituindo o SYNC_API_KEY global do agente) e seus próprios usuários
+-- autenticados via Supabase Auth, enxergando só os dados da sua organização.
+--
+-- Idempotente: seguro rodar de novo num banco onde a Fase 6 já foi aplicada.
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.organizations (
+    id         uuid primary key default gen_random_uuid(),
+    name       text not null,
+    slug       text not null unique,
+    api_key    text not null unique default encode(gen_random_bytes(32), 'hex'),
+    created_at timestamptz not null default now()
+);
+
+comment on table public.organizations is
+    'Uma organização (empresa/cliente) — dono de um conjunto de dispositivos e usuários.';
+comment on column public.organizations.api_key is
+    'Chave enviada pelo agente desktop (header X-Api-Key) para identificar a organização ao sincronizar — substitui o SYNC_API_KEY global das Fases 4-5.';
+
+-- profiles: 1:1 com auth.users, carrega a organização e o papel do usuário dentro dela.
+-- Não há FK para auth.users aqui por padrão de projeto Supabase (schema auth é gerenciado
+-- pela plataforma), mas a própria auth.users garante a integridade de id via trigger
+-- (ver bootstrap de cadastro no Next.js, que cria profiles só depois de criar o auth user).
+create table if not exists public.profiles (
+    id              uuid primary key references auth.users (id) on delete cascade,
+    organization_id uuid not null references public.organizations (id) on delete cascade,
+    role            text not null default 'owner' check (role in ('owner', 'manager', 'employee')),
+    created_at      timestamptz not null default now()
+);
+
+comment on table public.profiles is
+    'Vincula um usuário autenticado (auth.users) a uma organização e a um papel dentro dela.';
+
+create index if not exists profiles_organization_idx on public.profiles (organization_id);
+
+-- organization_id em devices/usage_events: nullable para não quebrar linhas que já existem
+-- de instalações da Fase 4/5 (sem organização ainda) — passam a ser preenchidas a partir do
+-- próximo sync, quando o agente enviar uma api_key de organização válida.
+alter table public.devices
+    add column if not exists organization_id uuid references public.organizations (id);
+alter table public.usage_events
+    add column if not exists organization_id uuid references public.organizations (id);
+
+create index if not exists devices_organization_idx on public.devices (organization_id);
+create index if not exists usage_events_organization_idx on public.usage_events (organization_id);
+
+-- current_organization_id(): security definer para evitar recursão de RLS — uma policy em
+-- profiles que fizesse "select organization_id from profiles where id = auth.uid()"
+-- dispararia a própria RLS de profiles de novo. security definer executa com os
+-- privilégios do dono da função (bypassa RLS internamente), então é seguro aqui: só
+-- devolve a organização do usuário autenticado atual, nunca dados de terceiros.
+create or replace function public.current_organization_id()
+returns uuid
+language sql
+security definer
+set search_path = public
+stable
+as $$
+    select organization_id from public.profiles where id = auth.uid();
+$$;
+
+alter table public.organizations enable row level security;
+alter table public.profiles enable row level security;
+
+drop policy if exists organizations_select_own on public.organizations;
+create policy organizations_select_own on public.organizations
+    for select to authenticated
+    using (id = public.current_organization_id());
+
+drop policy if exists profiles_select_own_organization on public.profiles;
+create policy profiles_select_own_organization on public.profiles
+    for select to authenticated
+    using (organization_id = public.current_organization_id());
+
+drop policy if exists devices_select_own_organization on public.devices;
+create policy devices_select_own_organization on public.devices
+    for select to authenticated
+    using (organization_id = public.current_organization_id());
+
+drop policy if exists usage_events_select_own_organization on public.usage_events;
+create policy usage_events_select_own_organization on public.usage_events
+    for select to authenticated
+    using (organization_id = public.current_organization_id());
+
+-- Nenhuma policy de insert/update/delete para authenticated: o dashboard só lê. Escrita
+-- continua exclusiva da service_role key (app/api/sync/route.ts e o bootstrap de cadastro),
+-- que ignora RLS por definição.

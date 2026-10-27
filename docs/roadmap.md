@@ -78,7 +78,7 @@ Deploy de produção no Vercel, validado ponta a ponta com dados reais.
 - Publicação standalone do agente (`dotnet publish` self-contained, single-file) para
   instalar em outra máquina sem precisar do .NET SDK nem do código-fonte lá.
 
-## Fase 5 — Autostart, Heartbeat e Alertas de Execução — em andamento neste repositório
+## Fase 5 — Autostart, Heartbeat e Alertas de Execução — ✅ concluída
 
 Escopo: o agente passa a (a) poder iniciar sozinho com o Windows e (b) avisar o backend
 quando está rodando — não só quando há atividade pra sincronizar. Sem isso, um agente que
@@ -99,13 +99,44 @@ que só não teve nada pra sincronizar; o backend não tem como saber se um disp
 - Testes automatizados (controle de autostart contra o Registro real do Windows, montagem dos
   payloads de `Started`/`Heartbeat`/`Stopped`).
 
-## Fase 6 — Autenticação e Multiempresa (futuro, não iniciado)
+## Fase 6 — Autenticação, Multi-tenancy e Gestão de Organizações — em andamento neste repositório
 
-- Login de usuário final; policies de RLS por usuário/dispositivo no Supabase (zero policies
-  permissivas hoje — isso é o que preenche essa lacuna).
-- Multi-tenancy (empresas, equipes, gestores), papéis e permissões (usuário vs. gestor).
-- Associação de dispositivo(s) a um usuário/empresa.
-- Cobrança/planos.
+Escopo: introduzir usuários reais (Supabase Auth) e isolar os dados por organização —
+até aqui o dashboard mostrava uma visão única, global, de todos os dispositivos
+(adequado só para um dono único validando a Fase 4/5 com seus próprios dados).
+
+- `docs/supabase_schema.sql`: tabela `organizations` (id, name, slug, api_key, created_at) —
+  `api_key` passa a ser por organização, substituindo o único `SYNC_API_KEY` global da Fase
+  4/5. Tabela `profiles` (1:1 com `auth.users`, vinculada a `organization_id`, com `role`:
+  `owner` | `manager` | `employee`). `organization_id` adicionado (nullable, para não quebrar
+  linhas existentes) em `devices` e `usage_events`. Função `security definer`
+  `current_organization_id()` para expor a organização do usuário autenticado às policies de
+  RLS sem causar recursão ao consultar `profiles` dentro da própria policy de `profiles`.
+  Novas policies de `select` para a role `authenticated`, filtrando por organização, nas
+  quatro tabelas.
+- `src/web-dashboard`: duas "personas" de cliente Supabase — `lib/supabase/admin.ts`
+  (service-role, só em `/api/sync` e no bootstrap de cadastro) e `lib/supabase/server.ts`
+  (sessão via cookies, `@supabase/ssr`, respeita RLS, usado pelo dashboard autenticado).
+  Login/cadastro/logout usam Server Actions com formulários simples — não há necessidade de
+  um client Supabase de navegador ainda (sem componente de cliente que precise dele hoje).
+  - `middleware.ts`: renova a sessão e redireciona para `/login` quem não está autenticado.
+  - `/login` e `/signup` (Server Actions): cadastro cria, numa única transação lógica, o
+    usuário no `auth.users`, a organização e o `profile` com role `owner` (via client admin,
+    que ignora RLS só para esse bootstrap).
+  - `app/api/sync/route.ts`: em vez de validar contra um `SYNC_API_KEY` fixo no ambiente,
+    resolve a organização pelo `api_key` recebido (lookup em `organizations`), grava
+    `organization_id` em todo `device`/`usage_event` que ingere e rejeita (401) uma chave que
+    não corresponda a nenhuma organização.
+  - Dashboard (`app/page.tsx`): passa a usar o client de sessão (RLS já restringe à
+    organização do usuário, sem filtro manual) e ganha um controle de logout.
+- Fora de escopo explícito: convite de outros membros para a organização, troca de senha/
+  recuperação de conta, e qualquer tela de gestão de papéis — a Fase 6 cria o modelo de
+  dados e o fluxo mínimo de login/cadastro; a gestão fina de usuários fica para quando houver
+  mais de uma organização real usando o sistema.
+- Testes automatizados: suíte C# inalterada (contrato do agente não muda — a chave que ele já
+  envia hoje simplesmente passa a ser resolvida por organização no servidor); verificação de
+  tipos (`tsc --noEmit`) e lint (`next lint`) cobrindo os novos tipos/rotas de autenticação e
+  organização no Next.js.
 
 ## Fase 7 — Dashboard Visual Avançado (futuro, não iniciado)
 

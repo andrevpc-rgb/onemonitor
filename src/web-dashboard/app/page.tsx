@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { connection } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { logout } from "@/lib/auth/actions";
 import type { UsageEventRow } from "@/lib/supabase/types";
 import { aggregateByApplication, aggregateByCategory, justifiedAbsences } from "@/lib/dashboard/aggregate";
 import { hoursAgoIso } from "@/lib/dashboard/format";
@@ -12,18 +13,24 @@ import { JustifiedAbsencesTable } from "@/components/JustifiedAbsencesTable";
 export default function DashboardPage() {
   return (
     <main className="mx-auto max-w-5xl space-y-6 p-6">
-      <header>
-        <h1 className="text-xl font-semibold">OneMonitor — Dashboard</h1>
-        <p className="text-sm" style={{ color: "#898781" }}>
-          Últimas 24 horas, todos os dispositivos. (Visão única — sem login/seleção de
-          dispositivo ainda; isso é Fase 5.)
-        </p>
+      <header className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-semibold">OneMonitor — Dashboard</h1>
+          <p className="text-sm" style={{ color: "#898781" }}>
+            Últimas 24 horas, todos os dispositivos da sua organização.
+          </p>
+        </div>
+        <form action={logout}>
+          <button type="submit" className="text-sm font-medium underline">
+            Sair
+          </button>
+        </form>
       </header>
 
       {/*
         A busca no Supabase precisa ficar num "buraco dinâmico" (Suspense) separado do
         shell estático: assim o `next build` consegue gerar a casca da página sem
-        precisar de SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY reais, e os dados só são
+        precisar de credenciais reais nem de uma sessão de usuário, e os dados só são
         buscados de verdade quando a página é servida (ver Next.js 16 Cache Components).
       */}
       <Suspense fallback={<DashboardSkeleton />}>
@@ -39,9 +46,12 @@ async function DashboardData() {
   // durante o prerender estático, mesmo dentro de um Suspense.
   await connection();
 
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   const since = hoursAgoIso(24);
 
+  // Sem filtro manual por organização aqui de propósito: a policy de RLS
+  // usage_events_select_own_organization (docs/supabase_schema.sql) já restringe o
+  // resultado à organização do usuário autenticado.
   const { data: events, error } = await supabase
     .from("usage_events")
     .select("*")

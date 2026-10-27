@@ -1,10 +1,27 @@
 /** Espelho das tabelas de docs/supabase_schema.sql. Mantido à mão (sem geração automática). */
 
 export type DeviceStatus = "online" | "offline" | "stopped";
+export type OrganizationRole = "owner" | "manager" | "employee";
+
+export interface OrganizationRow {
+  id: string;
+  name: string;
+  slug: string;
+  api_key: string;
+  created_at: string;
+}
+
+export interface ProfileRow {
+  id: string;
+  organization_id: string;
+  role: OrganizationRole;
+  created_at: string;
+}
 
 export interface DeviceRow {
   id: string;
   device_id: string;
+  organization_id: string | null;
   hostname: string | null;
   first_seen_at: string;
   last_seen_at: string;
@@ -15,6 +32,7 @@ export interface UsageEventRow {
   id: string;
   event_id: string;
   device_id: string;
+  organization_id: string | null;
   started_at: string;
   ended_at: string;
   duration_seconds: number;

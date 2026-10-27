@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { isValidSyncBatch, type DeviceStatusState, type SyncBatch } from "@/lib/sync/contracts";
 import type { DeviceStatus, UsageEventInsert } from "@/lib/supabase/types";
 
@@ -9,19 +9,32 @@ import type { DeviceStatus, UsageEventInsert } from "@/lib/supabase/types";
  * Os códigos de status aqui precisam continuar alinhados com a classificação que
  * HttpSyncApiClient já faz do lado do agente: 2xx = sucesso; 4xx = falha permanente (não
  * adianta reenviar o mesmo lote); 5xx = falha transitória (o agente retenta com backoff).
+ *
+ * Fase 6: a api_key enviada pelo agente (header X-Api-Key, mesmo valor de
+ * appsettings.json -> Sync.ApiKey) não é mais comparada a um único segredo global — ela
+ * identifica a organização dona do lote (tabela organizations.api_key), que é então
+ * gravada em todo device/usage_event que este request ingerir.
  */
 export async function POST(request: Request) {
   const apiKey = request.headers.get("x-api-key");
-  const expectedApiKey = process.env.SYNC_API_KEY;
 
-  if (!expectedApiKey) {
-    // Backend mal configurado — não é culpa do agente, mas também não é algo que reenviar
-    // o lote resolve sozinho; ainda assim, como 5xx, o agente vai retentar (razoável: um
-    // operador pode corrigir a env var a qualquer momento).
-    return NextResponse.json({ error: "SYNC_API_KEY não configurada no servidor." }, { status: 500 });
+  if (!apiKey) {
+    return NextResponse.json({ error: "Header X-Api-Key ausente." }, { status: 401 });
   }
 
-  if (apiKey !== expectedApiKey) {
+  const supabase = createSupabaseAdminClient();
+
+  const { data: organization, error: organizationError } = await supabase
+    .from("organizations")
+    .select("id")
+    .eq("api_key", apiKey)
+    .maybeSingle();
+
+  if (organizationError) {
+    return NextResponse.json({ error: organizationError.message }, { status: 500 });
+  }
+
+  if (!organization) {
     return NextResponse.json({ error: "API key inválida." }, { status: 401 });
   }
 
@@ -37,10 +50,16 @@ export async function POST(request: Request) {
   }
 
   const batch: SyncBatch = payload;
-  const supabase = createSupabaseServerClient();
+  const organizationId = organization.id;
 
-  const deviceUpsert: { device_id: string; last_seen_at: string; status?: DeviceStatus } = {
+  const deviceUpsert: {
+    device_id: string;
+    organization_id: string;
+    last_seen_at: string;
+    status?: DeviceStatus;
+  } = {
     device_id: batch.deviceId,
+    organization_id: organizationId,
     last_seen_at: new Date().toISOString(),
   };
   if (batch.status) {
@@ -62,6 +81,7 @@ export async function POST(request: Request) {
   const rows: UsageEventInsert[] = batch.events.map((event) => ({
     event_id: event.eventId,
     device_id: batch.deviceId,
+    organization_id: organizationId,
     started_at: event.startTime,
     ended_at: event.endTime,
     activity_type: event.type,
