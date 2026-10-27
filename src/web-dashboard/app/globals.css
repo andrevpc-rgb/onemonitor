@@ -50,6 +50,10 @@ body {
   --viz-series-6: #008300; /* green */
   --viz-series-7: #4a3aa7; /* violet */
   --viz-series-8: #e34948; /* red */
+
+  /* Status (fixo — nunca muda entre claro/escuro, nunca reaproveitado como série) */
+  --viz-status-good: #0ca30c;
+  --viz-status-warning: #fab219;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -72,5 +76,8 @@ body {
     --viz-series-6: #008300;
     --viz-series-7: #9085e9;
     --viz-series-8: #e66767;
+
+    --viz-status-good: #0ca30c;
+    --viz-status-warning: #fab219;
   }
 }

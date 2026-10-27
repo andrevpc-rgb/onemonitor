@@ -1,4 +1,4 @@
-import type { UsageEventRow } from "@/lib/supabase/types";
+import type { DeviceRow, UsageEventRow } from "@/lib/supabase/types";
 
 export interface AggregatedUsage {
   label: string;
@@ -30,6 +30,50 @@ function aggregate(events: UsageEventRow[], keyOf: (e: UsageEventRow) => string)
   return Array.from(totals.entries())
     .map(([label, seconds]) => ({ label, seconds }))
     .sort((a, b) => b.seconds - a.seconds);
+}
+
+export interface DeviceProductivity {
+  deviceId: string;
+  label: string;
+  activeSeconds: number;
+  idleSeconds: number;
+}
+
+/**
+ * Ativo vs. inativo por dispositivo — "Não classificado" fica de fora, mesma convenção de
+ * aggregateByApplication/aggregateByCategory (não é tempo de uso nem de ausência).
+ * Inclui dispositivos sem nenhum evento no período (zerados), para a lista bater com o
+ * grid de status.
+ */
+export function aggregateActiveVsIdleByDevice(
+  events: UsageEventRow[],
+  devices: Pick<DeviceRow, "device_id" | "hostname">[],
+): DeviceProductivity[] {
+  const totals = new Map<string, { activeSeconds: number; idleSeconds: number }>();
+  for (const device of devices) {
+    totals.set(device.device_id, { activeSeconds: 0, idleSeconds: 0 });
+  }
+
+  for (const event of events) {
+    if (event.activity_type !== "Active" && event.activity_type !== "Idle") {
+      continue;
+    }
+    const entry = totals.get(event.device_id) ?? { activeSeconds: 0, idleSeconds: 0 };
+    if (event.activity_type === "Active") {
+      entry.activeSeconds += event.duration_seconds;
+    } else {
+      entry.idleSeconds += event.duration_seconds;
+    }
+    totals.set(event.device_id, entry);
+  }
+
+  return devices
+    .map((device) => ({
+      deviceId: device.device_id,
+      label: device.hostname || device.device_id,
+      ...(totals.get(device.device_id) ?? { activeSeconds: 0, idleSeconds: 0 }),
+    }))
+    .sort((a, b) => b.activeSeconds + b.idleSeconds - (a.activeSeconds + a.idleSeconds));
 }
 
 export interface JustifiedAbsence {

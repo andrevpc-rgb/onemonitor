@@ -2,22 +2,33 @@ import { Suspense } from "react";
 import { connection } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { logout } from "@/lib/auth/actions";
-import type { UsageEventRow } from "@/lib/supabase/types";
-import { aggregateByApplication, aggregateByCategory, justifiedAbsences } from "@/lib/dashboard/aggregate";
-import { hoursAgoIso } from "@/lib/dashboard/format";
+import type { DeviceRow, UsageEventRow } from "@/lib/supabase/types";
+import {
+  aggregateActiveVsIdleByDevice,
+  aggregateByApplication,
+  aggregateByCategory,
+  justifiedAbsences,
+} from "@/lib/dashboard/aggregate";
+import { isRangeKey, resolveDateRange, type RangeKey } from "@/lib/dashboard/dateRange";
 import { assignCategoryColors } from "@/lib/viz/categoryColors";
+import { DeviceStatusGrid } from "@/components/DeviceStatusGrid";
+import { DashboardFilters } from "@/components/DashboardFilters";
+import { ActivityTimeline } from "@/components/ActivityTimeline";
+import { ProductivityBars } from "@/components/ProductivityBars";
 import { AppUsageChart } from "@/components/AppUsageChart";
 import { CategoryBreakdownChart } from "@/components/CategoryBreakdownChart";
 import { JustifiedAbsencesTable } from "@/components/JustifiedAbsencesTable";
 
-export default function DashboardPage() {
+type SearchParams = Promise<{ range?: string; device?: string }>;
+
+export default function DashboardPage({ searchParams }: { searchParams: SearchParams }) {
   return (
     <main className="mx-auto max-w-5xl space-y-6 p-6">
       <header className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold">OneMonitor — Dashboard</h1>
           <p className="text-sm" style={{ color: "#898781" }}>
-            Últimas 24 horas, todos os dispositivos da sua organização.
+            Visão da sua organização, com filtro por período e dispositivo.
           </p>
         </div>
         <form action={logout}>
@@ -34,42 +45,98 @@ export default function DashboardPage() {
         buscados de verdade quando a página é servida (ver Next.js 16 Cache Components).
       */}
       <Suspense fallback={<DashboardSkeleton />}>
-        <DashboardData />
+        <DashboardData searchParams={searchParams} />
       </Suspense>
     </main>
   );
 }
 
-async function DashboardData() {
+async function DashboardData({ searchParams }: { searchParams: SearchParams }) {
   // Marca explicitamente este componente como dependente de dados de requisição (Next.js
   // 16 Cache Components): sem isso, `next build` tenta executar a busca no Supabase
   // durante o prerender estático, mesmo dentro de um Suspense.
   await connection();
 
+  const params = await searchParams;
+  const range: RangeKey = isRangeKey(params.range) ? params.range : "today";
+  const selectedDevice = params.device && params.device !== "all" ? params.device : undefined;
+
+  const now = new Date();
+  const { sinceIso, untilIso, timelineDayStartIso } = resolveDateRange(range, now);
+
   const supabase = await createSupabaseServerClient();
-  const since = hoursAgoIso(24);
 
-  // Sem filtro manual por organização aqui de propósito: a policy de RLS
-  // usage_events_select_own_organization (docs/supabase_schema.sql) já restringe o
-  // resultado à organização do usuário autenticado.
-  const { data: events, error } = await supabase
-    .from("usage_events")
+  // Sem filtro manual por organização em nenhuma consulta abaixo: a policy de RLS de cada
+  // tabela (docs/supabase_schema.sql) já restringe o resultado à organização do usuário.
+  const { data: deviceRows, error: devicesError } = await supabase
+    .from("devices")
     .select("*")
-    .gte("started_at", since)
-    .order("started_at", { ascending: true });
+    .order("hostname", { ascending: true });
 
-  if (error) {
-    return <p className="text-sm text-red-600">Erro ao carregar dados: {error.message}</p>;
+  if (devicesError) {
+    return <p className="text-sm text-red-600">Erro ao carregar dispositivos: {devicesError.message}</p>;
   }
 
-  const rows = (events ?? []) as UsageEventRow[];
-  const byApplication = aggregateByApplication(rows).slice(0, 10);
-  const byCategory = aggregateByCategory(rows);
+  const devices = (deviceRows ?? []) as DeviceRow[];
+
+  let mainEventsQuery = supabase
+    .from("usage_events")
+    .select("*")
+    .gte("started_at", sinceIso)
+    .lt("started_at", untilIso)
+    .order("started_at", { ascending: true });
+  if (selectedDevice) {
+    mainEventsQuery = mainEventsQuery.eq("device_id", selectedDevice);
+  }
+
+  const { data: mainEventRows, error: eventsError } = await mainEventsQuery;
+
+  if (eventsError) {
+    return <p className="text-sm text-red-600">Erro ao carregar eventos: {eventsError.message}</p>;
+  }
+
+  const mainEvents = (mainEventRows ?? []) as UsageEventRow[];
+
+  // "Últimos 7 dias" cobre uma janela maior que um único dia — a linha do tempo diária
+  // precisa de uma busca própria, só para o dia que ela exibe (ver resolveDateRange).
+  let timelineEvents = mainEvents;
+  if (range === "7d") {
+    const timelineDayEndIso = new Date(new Date(timelineDayStartIso).getTime() + 24 * 60 * 60 * 1000).toISOString();
+    let timelineQuery = supabase
+      .from("usage_events")
+      .select("*")
+      .gte("started_at", timelineDayStartIso)
+      .lt("started_at", timelineDayEndIso)
+      .order("started_at", { ascending: true });
+    if (selectedDevice) {
+      timelineQuery = timelineQuery.eq("device_id", selectedDevice);
+    }
+
+    const { data: timelineRows, error: timelineError } = await timelineQuery;
+    if (timelineError) {
+      return <p className="text-sm text-red-600">Erro ao carregar a linha do tempo: {timelineError.message}</p>;
+    }
+    timelineEvents = (timelineRows ?? []) as UsageEventRow[];
+  }
+
+  const filteredDevices = selectedDevice ? devices.filter((d) => d.device_id === selectedDevice) : devices;
+
+  const byApplication = aggregateByApplication(mainEvents).slice(0, 10);
+  const byCategory = aggregateByCategory(mainEvents);
   const colorByCategory = assignCategoryColors(byCategory.map((c) => c.label));
-  const absences = justifiedAbsences(rows);
+  const absences = justifiedAbsences(mainEvents);
+  const productivity = aggregateActiveVsIdleByDevice(mainEvents, filteredDevices);
 
   return (
     <>
+      <DeviceStatusGrid devices={devices} now={now} />
+
+      <DashboardFilters devices={devices} selectedRange={range} selectedDevice={selectedDevice} />
+
+      <ActivityTimeline devices={filteredDevices} events={timelineEvents} dayStartIso={timelineDayStartIso} />
+
+      <ProductivityBars data={productivity} />
+
       <AppUsageChart data={byApplication} />
 
       <CategoryBreakdownChart
@@ -88,7 +155,7 @@ async function DashboardData() {
 function DashboardSkeleton() {
   return (
     <div className="space-y-6" aria-busy="true">
-      {[0, 1, 2].map((i) => (
+      {[0, 1, 2, 3].map((i) => (
         <div key={i} className="h-24 animate-pulse rounded-lg bg-black/5" />
       ))}
     </div>

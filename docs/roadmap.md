@@ -138,14 +138,28 @@ até aqui o dashboard mostrava uma visão única, global, de todos os dispositiv
   tipos (`tsc --noEmit`) e lint (`next lint`) cobrindo os novos tipos/rotas de autenticação e
   organização no Next.js.
 
-## Fase 7 — Dashboard Visual Avançado (futuro, não iniciado)
+## Fase 7 — Dashboard B2B Avançado e Elementos Visuais para Gestão — em andamento neste repositório
 
-- Seletor de dispositivo e de período (hoje o dashboard mostra uma visão única das últimas
-  24h, somando todos os dispositivos).
-- Mais formas de visualização (linha do tempo, comparação entre dias/semanas, tendências).
-- Indicador de status do dispositivo (online/offline/parado), usando os eventos de heartbeat
-  da Fase 5.
-- Exportação de relatórios (CSV/PDF) a partir do dashboard web.
+Escopo: o dashboard deixa de ser uma visão única de "últimas 24h, todos os dispositivos" e
+ganha filtros reais (período, dispositivo) e visualizações pensadas para gestão de equipe —
+ainda sem um vínculo funcionário↔dispositivo (isso fica para uma fase futura; por ora cada
+card representa um dispositivo).
+
+- **Grid de dispositivos** (`DeviceStatusGrid`): um card por dispositivo da organização,
+  com badge Online/Ausente/Offline derivado de `devices.status` + `last_seen_at` (não é mais
+  só `status` cru — `status='stopped'` ou um `last_seen_at` muito antigo virar "Offline" é
+  lógica de leitura, calculada aqui, nunca escrita pelo agente). Sempre "ao vivo",
+  independente dos filtros de período.
+- **Filtros** (`DashboardFilters`): período (Hoje / Ontem / Últimos 7 dias) e dispositivo
+  específico, escopando todo o resto do dashboard abaixo deles.
+- **Linha do tempo diária** (`ActivityTimeline`): barra de 24h por dispositivo (small
+  multiples), com blocos de Ativo/Inativo/Não classificado proporcionais ao horário real.
+- **Produtividade** (`ProductivityBars`): Ativo vs. Inativo por dispositivo.
+- Distribuição por categoria e ausências justificadas: componentes da Fase 4 reaproveitados,
+  agora escopados pelos novos filtros em vez de uma janela fixa de 24h.
+- `lucide-react` adicionado para ícones dos badges de status e dos filtros — sem lib de
+  gráficos nova (os gráficos continuam HTML/CSS puro, seguindo o skill de dataviz já usado
+  desde a Fase 4).
 
 ## Fase 8 — Auditoria e Segurança (futuro, não iniciado)
 
