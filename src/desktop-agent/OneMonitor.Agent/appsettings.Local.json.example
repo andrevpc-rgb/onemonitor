@@ -8,6 +8,9 @@
   "Sync": {
     "Enabled": true,
     "ApiBaseUrl": "https://seu-dashboard.vercel.app/",
-    "ApiKey": "a-mesma-SYNC_API_KEY-configurada-no-Vercel"
+    "ApiKey": "o-api_key-da-sua-organizacao-no-supabase"
+  },
+  "Autostart": {
+    "Enabled": true
   }
 }
