@@ -54,6 +54,7 @@ body {
   /* Status (fixo — nunca muda entre claro/escuro, nunca reaproveitado como série) */
   --viz-status-good: #0ca30c;
   --viz-status-warning: #fab219;
+  --viz-status-critical: #d03b3b;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -79,5 +80,6 @@ body {
 
     --viz-status-good: #0ca30c;
     --viz-status-warning: #fab219;
+    --viz-status-critical: #d03b3b;
   }
 }

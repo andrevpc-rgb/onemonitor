@@ -10,11 +10,12 @@ import {
   aggregateByCategory,
   justifiedAbsences,
 } from "@/lib/dashboard/aggregate";
-import { isRangeKey, resolveDateRange, type RangeKey } from "@/lib/dashboard/dateRange";
+import { isRangeKey, resolveDateRange, RANGE_OPTIONS, type RangeKey } from "@/lib/dashboard/dateRange";
 import { DEFAULT_ORGANIZATION_SETTINGS, calculateNetTargetMinutes } from "@/lib/dashboard/workPolicy";
 import { assignCategoryColors } from "@/lib/viz/categoryColors";
 import { DeviceStatusGrid } from "@/components/DeviceStatusGrid";
 import { DashboardFilters } from "@/components/DashboardFilters";
+import { ProductivityGauge } from "@/components/ProductivityGauge";
 import { ActivityTimeline } from "@/components/ActivityTimeline";
 import { ProductivityBars } from "@/components/ProductivityBars";
 import { AppUsageChart } from "@/components/AppUsageChart";
@@ -138,11 +139,17 @@ async function DashboardData({ searchParams }: { searchParams: SearchParams }) {
   const { data: settingsRow } = await supabase.from("organization_settings").select("*").maybeSingle();
   const netTargetMinutes = calculateNetTargetMinutes(settingsRow ?? DEFAULT_ORGANIZATION_SETTINGS);
 
+  const periodLabel = RANGE_OPTIONS.find((o) => o.key === range)?.label ?? "Período selecionado";
+  const orgActiveSeconds = productivity.reduce((sum, d) => sum + d.activeSeconds, 0);
+  const orgIdleSeconds = productivity.reduce((sum, d) => sum + d.idleSeconds, 0);
+
   return (
     <>
-      <DeviceStatusGrid devices={devices} now={now} />
-
       <DashboardFilters devices={devices} selectedRange={range} selectedDevice={selectedDevice} />
+
+      <DeviceStatusGrid devices={filteredDevices} now={now} productivity={productivity} periodLabel={periodLabel} />
+
+      <ProductivityGauge activeSeconds={orgActiveSeconds} idleSeconds={orgIdleSeconds} periodLabel={periodLabel} />
 
       <ActivityTimeline devices={filteredDevices} events={timelineEvents} dayStartIso={timelineDayStartIso} />
 
