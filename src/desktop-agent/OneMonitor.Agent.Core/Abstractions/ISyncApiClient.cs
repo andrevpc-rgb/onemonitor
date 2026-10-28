@@ -14,9 +14,15 @@ public enum SyncOutcome
     PermanentFailure
 }
 
-public sealed record SyncResponse(SyncOutcome Outcome, string? Error = null)
+public sealed record SyncResponse(SyncOutcome Outcome, string? Error = null, OrganizationSettings? Settings = null)
 {
-    public static SyncResponse Success() => new(SyncOutcome.Success);
+    /// <summary>
+    /// <paramref name="settings"/> vem do corpo da resposta do heartbeat (ver
+    /// HttpSyncApiClient) — pode ser null se o backend não devolveu nada (versão antiga da
+    /// API, ou corpo vazio/malformado), nesse caso quem chama simplesmente não atualiza a
+    /// política vigente.
+    /// </summary>
+    public static SyncResponse Success(OrganizationSettings? settings = null) => new(SyncOutcome.Success, null, settings);
 
     public static SyncResponse Transient(string error) => new(SyncOutcome.TransientFailure, error);
 

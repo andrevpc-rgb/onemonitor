@@ -15,7 +15,8 @@ public class HttpSyncApiClient : ISyncApiClient
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        Converters = { new TimeOnlyJsonConverter() }
     };
 
     private readonly HttpClient _httpClient;
@@ -37,7 +38,8 @@ public class HttpSyncApiClient : ISyncApiClient
 
             if (response.IsSuccessStatusCode)
             {
-                return SyncResponse.Success();
+                var settings = await TryReadSettingsAsync(response, cancellationToken);
+                return SyncResponse.Success(settings);
             }
 
             var isTransient =
@@ -58,4 +60,25 @@ public class HttpSyncApiClient : ISyncApiClient
             return SyncResponse.Transient($"Timeout: {ex.Message}");
         }
     }
+
+    /// <summary>
+    /// Melhor esforço: um corpo vazio, malformado, ou sem "settings" (ex.: versão antiga do
+    /// backend) não deve derrubar um sync que, pelo status HTTP, já foi bem-sucedido —
+    /// simplesmente não há política nova para aplicar.
+    /// </summary>
+    private static async Task<OrganizationSettings?> TryReadSettingsAsync(
+        HttpResponseMessage response, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var payload = await response.Content.ReadFromJsonAsync<SyncSuccessPayload>(JsonOptions, cancellationToken);
+            return payload?.Settings;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private sealed record SyncSuccessPayload(OrganizationSettings? Settings);
 }

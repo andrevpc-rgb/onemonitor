@@ -50,3 +50,17 @@ export type UsageEventInsert = Omit<
   UsageEventRow,
   "id" | "duration_seconds" | "created_at" | "updated_at"
 >;
+
+/** work_start_time/work_end_time chegam como "HH:MM:SS" (coluna `time` do Postgres). */
+export interface OrganizationSettingsRow {
+  organization_id: string;
+  work_start_time: string;
+  work_end_time: string;
+  mandatory_break_minutes: number;
+  variable_break_minutes: number;
+  enable_idle_popup: boolean;
+  popup_idle_threshold_minutes: number;
+  updated_at: string;
+}
+
+export type OrganizationSettingsUpdate = Omit<OrganizationSettingsRow, "organization_id" | "updated_at">;

@@ -63,7 +63,7 @@ public class SyncService
                 _repository.MarkSynced(pending.Select(r => r.Id).ToList(), _clock.UtcNow);
             }
 
-            return SyncCycleResult.Synced(pending.Count);
+            return SyncCycleResult.Synced(pending.Count, response.Settings);
         }
 
         return SyncCycleResult.Failed(response.Error);
@@ -80,7 +80,7 @@ public class SyncService
         var response = await SendWithRetryAsync(batch, cancellationToken);
 
         return response.Outcome == SyncOutcome.Success
-            ? SyncCycleResult.Synced(0)
+            ? SyncCycleResult.Synced(0, response.Settings)
             : SyncCycleResult.Failed(response.Error);
     }
 

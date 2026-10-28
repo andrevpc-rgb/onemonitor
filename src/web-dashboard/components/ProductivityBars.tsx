@@ -1,5 +1,6 @@
 import type { DeviceProductivity } from "@/lib/dashboard/aggregate";
 import { formatDuration } from "@/lib/dashboard/format";
+import { formatMinutesAsHours } from "@/lib/dashboard/workPolicy";
 import { EmptyState } from "./EmptyState";
 
 const ACTIVE_COLOR = "var(--viz-series-1)";
@@ -11,14 +12,24 @@ const IDLE_COLOR = "var(--viz-series-2)";
  * references/choosing-a-form.md do skill de dataviz). Só 2 séries: direct-label é
  * suficiente, sem precisar de legenda por linha — uma legenda só, compartilhada.
  */
-export function ProductivityBars({ data }: { data: DeviceProductivity[] }) {
+export function ProductivityBars({
+  data,
+  targetMinutes,
+}: {
+  data: DeviceProductivity[];
+  /** Jornada líquida alvo (expediente menos pausas) — ver lib/dashboard/workPolicy.ts. */
+  targetMinutes: number;
+}) {
   const hasAnyData = data.some((d) => d.activeSeconds + d.idleSeconds > 0);
 
   return (
     <section className="viz-root rounded-lg p-4" style={{ background: "var(--viz-surface)" }}>
-      <h2 className="mb-4 text-sm font-semibold" style={{ color: "var(--viz-text-primary)" }}>
+      <h2 className="text-sm font-semibold" style={{ color: "var(--viz-text-primary)" }}>
         Ativo vs. inativo por dispositivo
       </h2>
+      <p className="mb-4 text-xs" style={{ color: "var(--viz-text-muted)" }}>
+        Jornada líquida alvo da organização: {formatMinutesAsHours(targetMinutes)}
+      </p>
 
       {!hasAnyData ? (
         <EmptyState message="Nenhuma atividade registrada no período." />

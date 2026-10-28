@@ -79,6 +79,18 @@ export async function signup(formData: FormData) {
     return;
   }
 
+  // Linha de configurações da organização (expediente/pausas/pop-up) — só os defaults da
+  // coluna (ver docs/supabase_schema.sql); o owner ajusta em /settings quando quiser.
+  const { error: settingsError } = await admin
+    .from("organization_settings")
+    .insert({ organization_id: organization.id });
+
+  if (settingsError) {
+    await admin.auth.admin.deleteUser(userId);
+    redirect(`/signup?error=${encodeURIComponent(settingsError.message)}`);
+    return;
+  }
+
   const supabase = await createSupabaseServerClient();
   const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
 

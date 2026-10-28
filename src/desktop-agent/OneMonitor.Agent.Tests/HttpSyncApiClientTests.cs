@@ -101,6 +101,53 @@ public class HttpSyncApiClientTests
         Assert.Equal("/api/sync", handler.LastRequest!.RequestUri!.AbsolutePath);
     }
 
+    [Fact]
+    public async Task SendBatchAsync_WithEmptyResponseBody_StillReturnsSuccessWithNullSettings()
+    {
+        // ReturningStatus(OK) não tem corpo — precisa não lançar ao tentar ler "settings".
+        var handler = StubHttpMessageHandler.ReturningStatus(HttpStatusCode.OK);
+        var client = CreateClient(handler);
+
+        var response = await client.SendBatchAsync(SampleBatch, CancellationToken.None);
+
+        Assert.Equal(SyncOutcome.Success, response.Outcome);
+        Assert.Null(response.Settings);
+    }
+
+    [Fact]
+    public async Task SendBatchAsync_WithSettingsInResponseBody_ParsesThem()
+    {
+        var handler = StubHttpMessageHandler.ReturningJson(HttpStatusCode.OK,
+            """
+            {"received":0,"upserted":0,"settings":{"workStartTime":"08:00:00","workEndTime":"18:00:00","enableIdlePopup":false,"popupIdleThresholdMinutes":30}}
+            """);
+        var client = CreateClient(handler);
+
+        var response = await client.SendBatchAsync(SampleBatch, CancellationToken.None);
+
+        Assert.Equal(SyncOutcome.Success, response.Outcome);
+        Assert.NotNull(response.Settings);
+        Assert.Equal(new TimeOnly(8, 0), response.Settings!.WorkStartTime);
+        Assert.Equal(new TimeOnly(18, 0), response.Settings.WorkEndTime);
+        Assert.False(response.Settings.EnableIdlePopup);
+        Assert.Equal(30, response.Settings.PopupIdleThresholdMinutes);
+    }
+
+    [Fact]
+    public async Task SendBatchAsync_WithShortHhMmTimeFormat_StillParses()
+    {
+        // O Postgres costuma devolver "HH:MM:SS", mas o conversor aceita "HH:MM" também —
+        // não custa ser tolerante a um formato mais curto do mesmo valor.
+        var handler = StubHttpMessageHandler.ReturningJson(HttpStatusCode.OK,
+            """{"settings":{"workStartTime":"08:00","workEndTime":"18:00","enableIdlePopup":true,"popupIdleThresholdMinutes":15}}""");
+        var client = CreateClient(handler);
+
+        var response = await client.SendBatchAsync(SampleBatch, CancellationToken.None);
+
+        Assert.Equal(new TimeOnly(8, 0), response.Settings!.WorkStartTime);
+        Assert.Equal(new TimeOnly(18, 0), response.Settings.WorkEndTime);
+    }
+
     private static HttpSyncApiClient CreateClient(HttpMessageHandler handler)
     {
         var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://example.test/") };

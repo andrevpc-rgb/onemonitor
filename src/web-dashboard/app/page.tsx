@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { connection } from "next/server";
+import Link from "next/link";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { logout } from "@/lib/auth/actions";
 import type { DeviceRow, UsageEventRow } from "@/lib/supabase/types";
@@ -10,6 +11,7 @@ import {
   justifiedAbsences,
 } from "@/lib/dashboard/aggregate";
 import { isRangeKey, resolveDateRange, type RangeKey } from "@/lib/dashboard/dateRange";
+import { DEFAULT_ORGANIZATION_SETTINGS, calculateNetTargetMinutes } from "@/lib/dashboard/workPolicy";
 import { assignCategoryColors } from "@/lib/viz/categoryColors";
 import { DeviceStatusGrid } from "@/components/DeviceStatusGrid";
 import { DashboardFilters } from "@/components/DashboardFilters";
@@ -31,11 +33,16 @@ export default function DashboardPage({ searchParams }: { searchParams: SearchPa
             Visão da sua organização, com filtro por período e dispositivo.
           </p>
         </div>
-        <form action={logout}>
-          <button type="submit" className="text-sm font-medium underline">
-            Sair
-          </button>
-        </form>
+        <div className="flex items-center gap-4">
+          <Link href="/settings" className="text-sm font-medium underline">
+            Configurações
+          </Link>
+          <form action={logout}>
+            <button type="submit" className="text-sm font-medium underline">
+              Sair
+            </button>
+          </form>
+        </div>
       </header>
 
       {/*
@@ -127,6 +134,10 @@ async function DashboardData({ searchParams }: { searchParams: SearchParams }) {
   const absences = justifiedAbsences(mainEvents);
   const productivity = aggregateActiveVsIdleByDevice(mainEvents, filteredDevices);
 
+  // Uma linha só por organização (RLS já restringe a own org — ver docs/supabase_schema.sql).
+  const { data: settingsRow } = await supabase.from("organization_settings").select("*").maybeSingle();
+  const netTargetMinutes = calculateNetTargetMinutes(settingsRow ?? DEFAULT_ORGANIZATION_SETTINGS);
+
   return (
     <>
       <DeviceStatusGrid devices={devices} now={now} />
@@ -135,7 +146,7 @@ async function DashboardData({ searchParams }: { searchParams: SearchParams }) {
 
       <ActivityTimeline devices={filteredDevices} events={timelineEvents} dayStartIso={timelineDayStartIso} />
 
-      <ProductivityBars data={productivity} />
+      <ProductivityBars data={productivity} targetMinutes={netTargetMinutes} />
 
       <AppUsageChart data={byApplication} />
 

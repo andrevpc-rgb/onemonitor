@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text;
 
 namespace OneMonitor.Agent.Tests.Fakes;
 
@@ -17,6 +18,9 @@ public class StubHttpMessageHandler : HttpMessageHandler
 
     public static StubHttpMessageHandler ReturningStatus(HttpStatusCode statusCode) =>
         new(_ => new HttpResponseMessage(statusCode));
+
+    public static StubHttpMessageHandler ReturningJson(HttpStatusCode statusCode, string json) =>
+        new(_ => new HttpResponseMessage(statusCode) { Content = new StringContent(json, Encoding.UTF8, "application/json") });
 
     public static StubHttpMessageHandler Throwing(Exception exception) => new(exception);
 

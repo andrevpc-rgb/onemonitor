@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { isValidSyncBatch, type DeviceStatusState, type SyncBatch } from "@/lib/sync/contracts";
-import type { DeviceStatus, UsageEventInsert } from "@/lib/supabase/types";
+import type { DeviceStatus, OrganizationSettingsRow, UsageEventInsert } from "@/lib/supabase/types";
+import { DEFAULT_ORGANIZATION_SETTINGS } from "@/lib/dashboard/workPolicy";
 
 /**
  * Ingestão de lotes enviados pelo agente desktop C# (SyncService -> HttpSyncApiClient).
@@ -52,6 +53,15 @@ export async function POST(request: Request) {
   const batch: SyncBatch = payload;
   const organizationId = organization.id;
 
+  // Fase 8: devolvido no heartbeat para o agente aplicar a trava de expediente e a regra
+  // do pop-up de justificativa localmente — ver src/desktop-agent/.../JustificationPolicy.cs.
+  const { data: settingsRow } = await supabase
+    .from("organization_settings")
+    .select("work_start_time, work_end_time, enable_idle_popup, popup_idle_threshold_minutes")
+    .eq("organization_id", organizationId)
+    .maybeSingle();
+  const settings = toAgentSettings(settingsRow ?? DEFAULT_ORGANIZATION_SETTINGS);
+
   const deviceUpsert: {
     device_id: string;
     organization_id: string;
@@ -75,7 +85,7 @@ export async function POST(request: Request) {
   }
 
   if (batch.events.length === 0) {
-    return NextResponse.json({ received: 0, upserted: 0 });
+    return NextResponse.json({ received: 0, upserted: 0, settings });
   }
 
   const rows: UsageEventInsert[] = batch.events.map((event) => ({
@@ -102,7 +112,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: eventsError.message }, { status: 500 });
   }
 
-  return NextResponse.json({ received: batch.events.length, upserted: count ?? batch.events.length });
+  return NextResponse.json({ received: batch.events.length, upserted: count ?? batch.events.length, settings });
 }
 
 /**
@@ -112,4 +122,19 @@ export async function POST(request: Request) {
  */
 function toDeviceStatus(state: DeviceStatusState): DeviceStatus {
   return state === "Stopped" ? "stopped" : "online";
+}
+
+/**
+ * camelCase e só os 4 campos que o agente C# precisa (HttpSyncApiClient.OrganizationSettings)
+ * — mandatory_break_minutes/variable_break_minutes ficam só no dashboard web (Fase 7).
+ */
+function toAgentSettings(
+  row: Pick<OrganizationSettingsRow, "work_start_time" | "work_end_time" | "enable_idle_popup" | "popup_idle_threshold_minutes">,
+) {
+  return {
+    workStartTime: row.work_start_time,
+    workEndTime: row.work_end_time,
+    enableIdlePopup: row.enable_idle_popup,
+    popupIdleThresholdMinutes: row.popup_idle_threshold_minutes,
+  };
 }

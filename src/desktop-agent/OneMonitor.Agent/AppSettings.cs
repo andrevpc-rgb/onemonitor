@@ -39,6 +39,12 @@ public class AppSettings
 
     public string ResolvedDeviceIdFilePath => Path.Combine(ResolveDataRoot(), "device-id.txt");
 
+    /// <summary>
+    /// Cache local da última OrganizationSettings recebida do backend (ver
+    /// FileWorkPolicyProvider) — sobrevive a reinícios sem precisar de rede.
+    /// </summary>
+    public string ResolvedOrganizationSettingsFilePath => Path.Combine(ResolveDataRoot(), "organization-settings.json");
+
     public string ResolvedDatabasePath =>
         !string.IsNullOrWhiteSpace(DatabasePath)
             ? DatabasePath

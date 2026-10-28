@@ -1,8 +1,10 @@
 using OneMonitor.Agent.Core.Abstractions;
+using OneMonitor.Agent.Core.Models;
 using OneMonitor.Agent.Core.Services;
 using OneMonitor.Agent.Infrastructure.Categorization;
 using OneMonitor.Agent.Infrastructure.Persistence;
 using OneMonitor.Agent.Infrastructure.Reporting;
+using OneMonitor.Agent.Infrastructure.Settings;
 using OneMonitor.Agent.Infrastructure.Sync;
 using OneMonitor.Agent.Infrastructure.Time;
 using OneMonitor.Agent.Infrastructure.Windows;
@@ -23,12 +25,17 @@ internal static class Program
 
         var repository = new SqliteActivityRepository(settings.ResolvedDatabasePath);
 
+        IWorkPolicyProvider workPolicyProvider = new FileWorkPolicyProvider(
+            settings.ResolvedOrganizationSettingsFilePath,
+            OrganizationSettings.Default);
+
         var tracker = new ActivityTracker(
             new ActiveWindowProvider(),
             new IdleTimeProvider(),
             repository,
             new SystemClock(),
-            TimeSpan.FromMinutes(settings.InactivityThresholdMinutes));
+            TimeSpan.FromMinutes(settings.InactivityThresholdMinutes),
+            workPolicyProvider);
 
         var categoryResolver = CategoryRulesLoader.LoadFromFile(settings.ResolvedCategoriesConfigPath);
 

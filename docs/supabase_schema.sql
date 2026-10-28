@@ -222,3 +222,80 @@ create policy usage_events_select_own_organization on public.usage_events
 -- Nenhuma policy de insert/update/delete para authenticated: o dashboard só lê. Escrita
 -- continua exclusiva da service_role key (app/api/sync/route.ts e o bootstrap de cadastro),
 -- que ignora RLS por definição.
+
+-- ---------------------------------------------------------------------------
+-- Migração Fase 8 — Configurações de organização (expediente, pausas, pop-up de
+-- justificativa) e devolução delas ao agente desktop no heartbeat de sync.
+--
+-- Uma linha por organização (chave primária = organization_id, não um id próprio — não
+-- há motivo para mais de uma configuração por organização). Lida pela tela /settings do
+-- dashboard (RLS) e por app/api/sync/route.ts (service_role, para devolver ao agente).
+--
+-- Idempotente: seguro rodar de novo num banco onde a Fase 8 já foi aplicada.
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.organization_settings (
+    organization_id             uuid primary key references public.organizations (id) on delete cascade,
+    work_start_time             time not null default '08:00',
+    work_end_time                time not null default '18:00',
+    mandatory_break_minutes     integer not null default 60,
+    variable_break_minutes      integer not null default 0,
+    enable_idle_popup           boolean not null default true,
+    popup_idle_threshold_minutes integer not null default 15,
+    updated_at                  timestamptz not null default now(),
+
+    constraint organization_settings_work_hours_check check (work_end_time > work_start_time),
+    constraint organization_settings_break_minutes_check
+        check (mandatory_break_minutes >= 0 and variable_break_minutes >= 0),
+    constraint organization_settings_popup_threshold_check check (popup_idle_threshold_minutes >= 0)
+);
+
+comment on table public.organization_settings is
+    'Parâmetros de expediente/pausas e do pop-up de justificativa de ausência, por organização — ajustados em /settings (owner/manager) e devolvidos ao agente desktop no heartbeat de sync.';
+
+drop trigger if exists organization_settings_set_updated_at on public.organization_settings;
+create trigger organization_settings_set_updated_at
+    before update on public.organization_settings
+    for each row
+    execute function public.set_updated_at();
+
+alter table public.organization_settings enable row level security;
+
+-- current_organization_role(): mesma técnica de current_organization_id() (security
+-- definer, evita recursão) — devolve o papel do usuário autenticado atual, usado para
+-- restringir quem pode editar as configurações (owner/manager, não employee).
+create or replace function public.current_organization_role()
+returns text
+language sql
+security definer
+set search_path = public
+stable
+as $$
+    select role from public.profiles where id = auth.uid();
+$$;
+
+drop policy if exists organization_settings_select_own on public.organization_settings;
+create policy organization_settings_select_own on public.organization_settings
+    for select to authenticated
+    using (organization_id = public.current_organization_id());
+
+drop policy if exists organization_settings_update_own on public.organization_settings;
+create policy organization_settings_update_own on public.organization_settings
+    for update to authenticated
+    using (
+        organization_id = public.current_organization_id()
+        and public.current_organization_role() in ('owner', 'manager')
+    )
+    with check (
+        organization_id = public.current_organization_id()
+        and public.current_organization_role() in ('owner', 'manager')
+    );
+
+-- Backfill: toda organização criada antes desta fase (ou pelo bootstrap de cadastro, que
+-- já passa a inserir sua própria linha) ganha uma linha de configurações com os padrões —
+-- sem isso, /api/sync e a tela /settings não teriam nada para ler para organizações antigas.
+insert into public.organization_settings (organization_id)
+select o.id
+from public.organizations o
+left join public.organization_settings s on s.organization_id = o.id
+where s.organization_id is null;

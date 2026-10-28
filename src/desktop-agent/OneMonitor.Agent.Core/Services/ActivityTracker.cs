@@ -15,6 +15,7 @@ public class ActivityTracker
     private readonly IActivityRepository _repository;
     private readonly IClock _clock;
     private readonly TimeSpan _idleThreshold;
+    private readonly IWorkPolicyProvider _workPolicyProvider;
 
     private ActivityRecord? _openRecord;
 
@@ -23,17 +24,26 @@ public class ActivityTracker
         IIdleTimeProvider idleTimeProvider,
         IActivityRepository repository,
         IClock clock,
-        TimeSpan idleThreshold)
+        TimeSpan idleThreshold,
+        IWorkPolicyProvider? workPolicyProvider = null)
     {
         _windowProvider = windowProvider;
         _idleTimeProvider = idleTimeProvider;
         _repository = repository;
         _clock = clock;
         _idleThreshold = idleThreshold;
+        _workPolicyProvider = workPolicyProvider ?? new StaticWorkPolicyProvider(OrganizationSettings.Unrestricted);
     }
 
     /// <summary>Registro em memória ainda não persistido, refletindo a atividade corrente.</summary>
     public ActivityRecord? CurrentRecord => _openRecord;
+
+    /// <summary>
+    /// Política de expediente/pop-up vigente — exposta para quem decide se mostra o pop-up
+    /// (ver JustificationPolicy, chamada pela Agent) e para quem a atualiza após um sync
+    /// bem-sucedido, sem precisar de uma segunda instância/injeção separada.
+    /// </summary>
+    public IWorkPolicyProvider WorkPolicyProvider => _workPolicyProvider;
 
     /// <summary>
     /// Disparado quando a atividade sai de Idle para qualquer outro tipo (usuário voltou de
@@ -45,6 +55,9 @@ public class ActivityTracker
     public void Tick()
     {
         var now = _clock.UtcNow;
+
+        SplitIdleRecordAtWorkEndIfNeeded(now);
+
         var idleTime = _idleTimeProvider.GetIdleTime();
 
         ActivityType type;
@@ -120,6 +133,45 @@ public class ActivityTracker
         _openRecord.EndTime = _clock.UtcNow;
         _repository.SaveClosedRecord(_openRecord);
         _openRecord = null;
+    }
+
+    /// <summary>
+    /// Corte de expediente: se o registro aberto é Idle e começou antes do fim do
+    /// expediente (horário local) do dia dele, mas "agora" já passou desse horário, fecha-o
+    /// exatamente no limite e abre um novo registro Idle a partir dali — em vez de deixá-lo
+    /// se estender até o usuário realmente voltar, possivelmente no dia seguinte, e então
+    /// reportar uma "ausência" de muitas horas que nunca foi tempo de expediente de fato
+    /// (ver JustificationPolicy, que depende desta duração já vir correta). Não dispara
+    /// IdleReturned: o usuário continua ausente, isto é só um corte administrativo de dados.
+    /// </summary>
+    private void SplitIdleRecordAtWorkEndIfNeeded(DateTimeOffset now)
+    {
+        if (_openRecord is not { Type: ActivityType.Idle } openIdleRecord)
+        {
+            return;
+        }
+
+        var workEndBoundary = WorkEndBoundaryUtc(openIdleRecord.StartTime);
+        if (openIdleRecord.StartTime >= workEndBoundary || now < workEndBoundary)
+        {
+            return;
+        }
+
+        openIdleRecord.EndTime = workEndBoundary;
+        _repository.SaveClosedRecord(openIdleRecord);
+        _openRecord = CreateRecord(ActivityType.Idle, "(idle)", string.Empty, workEndBoundary);
+    }
+
+    /// <summary>Fim do expediente (horário local), no mesmo dia civil local de <paramref name="instant"/>.</summary>
+    private DateTimeOffset WorkEndBoundaryUtc(DateTimeOffset instant)
+    {
+        var local = instant.ToLocalTime();
+        var workEndTime = _workPolicyProvider.Current.WorkEndTime;
+        var boundaryLocal = new DateTimeOffset(
+            local.Year, local.Month, local.Day,
+            workEndTime.Hour, workEndTime.Minute, workEndTime.Second,
+            local.Offset);
+        return boundaryLocal.ToUniversalTime();
     }
 
     private static ActivityRecord CreateRecord(ActivityType type, string processName, string windowTitle, DateTimeOffset now) =>

@@ -85,6 +85,32 @@ public class SyncServiceTests
     }
 
     [Fact]
+    public async Task SyncPendingAsync_WhenApiReturnsSettings_PropagatesThemOnTheResult()
+    {
+        var repository = new InMemoryActivityRepository();
+        var settings = new OrganizationSettings(new TimeOnly(9, 0), new TimeOnly(17, 0), true, 10);
+        var apiClient = new FakeSyncApiClient(SyncResponse.Success(settings));
+        var service = new SyncService(repository, apiClient, new ManualClock(DateTimeOffset.UtcNow), new FakeAsyncDelay(), new FakeCategoryResolver(), "device-1");
+
+        var result = await service.SyncPendingAsync();
+
+        Assert.Equal(settings, result.Settings);
+    }
+
+    [Fact]
+    public async Task SendStatusAsync_WhenApiReturnsSettings_PropagatesThemOnTheResult()
+    {
+        var repository = new InMemoryActivityRepository();
+        var settings = new OrganizationSettings(new TimeOnly(9, 0), new TimeOnly(17, 0), true, 10);
+        var apiClient = new FakeSyncApiClient(SyncResponse.Success(settings));
+        var service = new SyncService(repository, apiClient, new ManualClock(DateTimeOffset.UtcNow), new FakeAsyncDelay(), new FakeCategoryResolver(), "device-1");
+
+        var result = await service.SendStatusAsync(DeviceStatusEvent.Started);
+
+        Assert.Equal(settings, result.Settings);
+    }
+
+    [Fact]
     public async Task SyncPendingAsync_OnSuccess_MarksRecordsAsSyncedAndSendsCorrectPayload()
     {
         var repository = new InMemoryActivityRepository();

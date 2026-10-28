@@ -81,6 +81,11 @@ public sealed class TrayApplicationContext : ApplicationContext
 
     private void OnIdleReturned(object? sender, IdleReturnedEventArgs e)
     {
+        if (!JustificationPolicy.ShouldPrompt(e, _tracker.WorkPolicyProvider.Current))
+        {
+            return;
+        }
+
         // Pausa o polling enquanto o pop-up está aberto: evita que novos ticks mudem o
         // estado do tracker por baixo do diálogo modal.
         _timer.Stop();
@@ -168,7 +173,9 @@ public sealed class TrayApplicationContext : ApplicationContext
 
         try
         {
-            return await _syncService.SyncPendingAsync();
+            var result = await _syncService.SyncPendingAsync();
+            ApplySettingsIfPresent(result);
+            return result;
         }
         catch (Exception)
         {
@@ -214,12 +221,24 @@ public sealed class TrayApplicationContext : ApplicationContext
         try
         {
             using var cts = timeout is { } t ? new CancellationTokenSource(t) : new CancellationTokenSource();
-            await _syncService.SendStatusAsync(state, cts.Token);
+            var result = await _syncService.SendStatusAsync(state, cts.Token);
+            ApplySettingsIfPresent(result);
         }
         catch (Exception)
         {
             // Melhor esforço: um "Started"/"Stopped" que falha não deve derrubar o agente nem
             // travar o fechamento — o próximo Heartbeat bem-sucedido já reflete o estado atual.
+        }
+    }
+
+    // "Started" também devolve a OrganizationSettings vigente — aplicá-la já na largada,
+    // sem esperar o primeiro ciclo periódico de Heartbeat, evita alguns minutos com a
+    // política default/desatualizada logo depois do agente iniciar.
+    private void ApplySettingsIfPresent(SyncCycleResult result)
+    {
+        if (result.Settings is not null)
+        {
+            _tracker.WorkPolicyProvider.Update(result.Settings);
         }
     }
 
