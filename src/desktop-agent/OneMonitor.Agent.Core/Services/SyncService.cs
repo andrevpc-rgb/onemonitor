@@ -17,6 +17,7 @@ public class SyncService
     private readonly IAsyncDelay _delay;
     private readonly ICategoryResolver _categoryResolver;
     private readonly string _deviceId;
+    private readonly string? _deviceName;
     private readonly int _batchSize;
     private readonly int _maxRetries;
 
@@ -28,7 +29,8 @@ public class SyncService
         ICategoryResolver categoryResolver,
         string deviceId,
         int batchSize = 50,
-        int maxRetries = 3)
+        int maxRetries = 3,
+        string? deviceName = null)
     {
         _repository = repository;
         _apiClient = apiClient;
@@ -38,6 +40,7 @@ public class SyncService
         _deviceId = deviceId;
         _batchSize = batchSize;
         _maxRetries = maxRetries;
+        _deviceName = deviceName;
     }
 
     /// <summary>
@@ -52,7 +55,7 @@ public class SyncService
     {
         var pending = _repository.GetPendingSyncRecords(_batchSize);
         var status = new DeviceStatusEvent(DeviceStatusEvent.Heartbeat, _clock.UtcNow);
-        var batch = new SyncBatch(_deviceId, pending.Select(ToEvent).ToList(), status);
+        var batch = new SyncBatch(_deviceId, pending.Select(ToEvent).ToList(), status, _deviceName);
 
         var response = await SendWithRetryAsync(batch, cancellationToken);
 
@@ -76,7 +79,7 @@ public class SyncService
     /// </summary>
     public async Task<SyncCycleResult> SendStatusAsync(string state, CancellationToken cancellationToken = default)
     {
-        var batch = new SyncBatch(_deviceId, Array.Empty<ActivitySyncEvent>(), new DeviceStatusEvent(state, _clock.UtcNow));
+        var batch = new SyncBatch(_deviceId, Array.Empty<ActivitySyncEvent>(), new DeviceStatusEvent(state, _clock.UtcNow), _deviceName);
         var response = await SendWithRetryAsync(batch, cancellationToken);
 
         return response.Outcome == SyncOutcome.Success

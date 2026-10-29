@@ -5,6 +5,7 @@ import { Wifi, Clock, WifiOff, Search } from "lucide-react";
 import type { DeviceRow } from "@/lib/supabase/types";
 import type { DeviceProductivity } from "@/lib/dashboard/aggregate";
 import { deriveDeviceStatus, DEVICE_STATUS_LABELS, type DeviceStatusLabel } from "@/lib/dashboard/deviceStatus";
+import { displayDeviceName } from "@/lib/dashboard/deviceDisplay";
 import { formatRelativeTime, formatDate } from "@/lib/dashboard/format";
 import { productivityPercent, productivityTier, PRODUCTIVITY_TIER_COLOR } from "@/lib/dashboard/productivity";
 import { EmptyState } from "./EmptyState";
@@ -61,7 +62,7 @@ export function DeviceStatusGrid({ devices, now, productivity, periodLabel }: De
     if (!needle) {
       return sorted;
     }
-    return sorted.filter((d) => (d.hostname ?? d.device_id).toLowerCase().includes(needle));
+    return sorted.filter((d) => displayDeviceName(d).toLowerCase().includes(needle));
   }, [sorted, query]);
 
   return (
@@ -111,9 +112,9 @@ export function DeviceStatusGrid({ devices, now, productivity, periodLabel }: De
                   <p
                     className="truncate text-sm font-medium"
                     style={{ color: "var(--viz-text-primary)" }}
-                    title={device.hostname ?? device.device_id}
+                    title={displayDeviceName(device)}
                   >
-                    {device.hostname || device.device_id}
+                    {displayDeviceName(device)}
                   </p>
                   {hasProductivityData && (
                     <span

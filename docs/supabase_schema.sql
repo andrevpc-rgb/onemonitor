@@ -528,3 +528,26 @@ $$;
 
 comment on function public.check_sync_rate_limit(text, integer) is
     'Incrementa o contador do dispositivo na janela de 1 minuto corrente e devolve se ainda está dentro do limite (default 20 req/min). Chamada por app/api/sync/route.ts antes de processar o lote.';
+
+-- ---------------------------------------------------------------------------
+-- Migração "Nome amigável do dispositivo".
+--
+-- devices.hostname já existe desde a Fase 4, mas nunca foi de fato preenchido —
+-- app/api/sync/route.ts nunca gravou nada nessa coluna, então os cards do dashboard
+-- sempre caíram no fallback device_id (o GUID). Duas colunas, dois papéis:
+--   - hostname: o que o agente relata (Environment.MachineName + UserName), atualizado a
+--     cada sync — é o dado "cru", nunca editado manualmente.
+--   - device_name: o rótulo exibido, editável pelo owner/manager em /devices. Preenchido
+--     automaticamente só na primeira vez (hostname ainda vazio) — depois disso o agente
+--     nunca mais sobrescreve, mesmo que o hostname real mude, para não apagar um apelido
+--     escolhido manualmente.
+--
+-- Idempotente: seguro rodar de novo num banco onde esta migração já foi aplicada.
+-- ---------------------------------------------------------------------------
+
+alter table public.devices add column if not exists device_name text;
+
+comment on column public.devices.hostname is
+    'Nome relatado pelo agente (Environment.MachineName + UserName) — atualizado a cada sync, nunca editado manualmente.';
+comment on column public.devices.device_name is
+    'Rótulo exibido no dashboard — editável em /devices (owner/manager). Preenchido a partir do hostname só na primeira vez; depois disso o agente nunca mais sobrescreve.';

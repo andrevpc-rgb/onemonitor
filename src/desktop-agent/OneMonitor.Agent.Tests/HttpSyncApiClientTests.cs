@@ -87,6 +87,19 @@ public class HttpSyncApiClientTests
     }
 
     [Fact]
+    public async Task SendBatchAsync_SerializesDeviceName()
+    {
+        var handler = StubHttpMessageHandler.ReturningStatus(HttpStatusCode.OK);
+        var client = CreateClient(handler);
+        var batch = SampleBatch with { DeviceName = "DESKTOP-ANDRE (andre)" };
+
+        await client.SendBatchAsync(batch, CancellationToken.None);
+
+        Assert.NotNull(handler.LastRequestBody);
+        Assert.Contains("\"deviceName\":\"DESKTOP-ANDRE (andre)\"", handler.LastRequestBody);
+    }
+
+    [Fact]
     public async Task SendBatchAsync_WithDefaultPath_PostsToApiSync()
     {
         // Regressão: o default já foi "api/sync/events" por engano, enquanto a rota real

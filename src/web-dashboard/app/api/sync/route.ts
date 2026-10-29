@@ -75,7 +75,7 @@ export async function POST(request: Request) {
   // retentativa) — nenhuma mudança necessária no agente.
   const { data: existingDevice } = await supabase
     .from("devices")
-    .select("revoked_at")
+    .select("revoked_at, device_name")
     .eq("device_id", batch.deviceId)
     .maybeSingle();
 
@@ -97,6 +97,8 @@ export async function POST(request: Request) {
     organization_id: string;
     last_seen_at: string;
     status?: DeviceStatus;
+    hostname?: string;
+    device_name?: string;
   } = {
     device_id: batch.deviceId,
     organization_id: organizationId,
@@ -104,6 +106,15 @@ export async function POST(request: Request) {
   };
   if (batch.status) {
     deviceUpsert.status = toDeviceStatus(batch.status.state);
+  }
+  if (batch.deviceName) {
+    // hostname é sempre atualizado (é o dado "cru", relatado pelo agente); device_name só
+    // na primeira vez (ver comentário da migração em docs/supabase_schema.sql) — depois
+    // disso ele é só editável manualmente em /devices, nunca mais sobrescrito aqui.
+    deviceUpsert.hostname = batch.deviceName;
+    if (!existingDevice?.device_name) {
+      deviceUpsert.device_name = batch.deviceName;
+    }
   }
 
   const { error: deviceError } = await supabase

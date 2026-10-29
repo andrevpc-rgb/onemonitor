@@ -29,5 +29,16 @@ public sealed record DeviceStatusEvent(string State, DateTimeOffset Timestamp)
     public const string Stopped = "Stopped";
 }
 
-/// <summary>Um lote de eventos enviado em uma única requisição de sincronização.</summary>
-public sealed record SyncBatch(string DeviceId, IReadOnlyList<ActivitySyncEvent> Events, DeviceStatusEvent? Status = null);
+/// <summary>
+/// Um lote de eventos enviado em uma única requisição de sincronização.
+/// </summary>
+/// <param name="DeviceName">
+/// "NomeDoComputador (usuário)" — ver <see cref="OneMonitor.Agent.Core.Services.DeviceNameProvider"/>.
+/// Só o backend decide se isso vira o nome exibido no dashboard: um nome já definido
+/// manualmente em /devices não é sobrescrito (ver app/api/sync/route.ts).
+/// </param>
+public sealed record SyncBatch(
+    string DeviceId,
+    IReadOnlyList<ActivitySyncEvent> Events,
+    DeviceStatusEvent? Status = null,
+    string? DeviceName = null);

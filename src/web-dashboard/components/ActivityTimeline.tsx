@@ -1,4 +1,5 @@
 import type { DeviceRow, UsageEventRow } from "@/lib/supabase/types";
+import { displayDeviceName } from "@/lib/dashboard/deviceDisplay";
 import { formatDate, formatDateTime, formatDuration } from "@/lib/dashboard/format";
 import { EmptyState } from "./EmptyState";
 
@@ -36,7 +37,7 @@ export function ActivityTimeline({
   events,
   dayStartIso,
 }: {
-  devices: Pick<DeviceRow, "device_id" | "hostname">[];
+  devices: Pick<DeviceRow, "device_id" | "hostname" | "device_name">[];
   events: UsageEventRow[];
   dayStartIso: string;
 }) {
@@ -70,9 +71,9 @@ export function ActivityTimeline({
                   <span
                     className="w-28 shrink-0 truncate text-xs"
                     style={{ color: "var(--viz-text-secondary)" }}
-                    title={device.hostname ?? device.device_id}
+                    title={displayDeviceName(device)}
                   >
-                    {device.hostname || device.device_id}
+                    {displayDeviceName(device)}
                   </span>
                   <div
                     className="relative h-5 flex-1 overflow-hidden rounded-sm"

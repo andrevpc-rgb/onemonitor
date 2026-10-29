@@ -83,6 +83,7 @@ internal static class Program
             categoryResolver,
             deviceId,
             settings.Sync.BatchSize,
-            settings.Sync.MaxRetries);
+            settings.Sync.MaxRetries,
+            DeviceNameProvider.GetFriendlyName());
     }
 }

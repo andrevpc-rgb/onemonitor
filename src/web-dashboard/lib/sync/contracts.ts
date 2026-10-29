@@ -34,6 +34,8 @@ export interface SyncBatch {
   events: ActivitySyncEvent[];
   /** Opcional — Fase 5. Sinal de vida do agente, independente de haver atividade pendente. */
   status?: DeviceStatusEvent;
+  /** "NomeDoComputador (usuário)" sugerido pelo agente — ver app/api/sync/route.ts. */
+  deviceName?: string;
 }
 
 const VALID_TYPES: ReadonlySet<string> = new Set<ActivityTypeName>([
@@ -63,6 +65,10 @@ export function isValidSyncBatch(value: unknown): value is SyncBatch {
   }
 
   if (!Array.isArray(batch.events) || !batch.events.every(isValidSyncEvent)) {
+    return false;
+  }
+
+  if (batch.deviceName !== undefined && typeof batch.deviceName !== "string") {
     return false;
   }
 

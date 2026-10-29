@@ -1,5 +1,6 @@
 import { SlidersHorizontal } from "lucide-react";
 import { RANGE_OPTIONS, type RangeKey } from "@/lib/dashboard/dateRange";
+import { displayDeviceName } from "@/lib/dashboard/deviceDisplay";
 import type { DeviceRow } from "@/lib/supabase/types";
 
 /**
@@ -13,7 +14,7 @@ export function DashboardFilters({
   selectedRange,
   selectedDevice,
 }: {
-  devices: Pick<DeviceRow, "device_id" | "hostname">[];
+  devices: Pick<DeviceRow, "device_id" | "hostname" | "device_name">[];
   selectedRange: RangeKey;
   selectedDevice: string | undefined;
 }) {
@@ -47,7 +48,7 @@ export function DashboardFilters({
         <option value="all">Todos os dispositivos</option>
         {devices.map((device) => (
           <option key={device.device_id} value={device.device_id}>
-            {device.hostname || device.device_id}
+            {displayDeviceName(device)}
           </option>
         ))}
       </select>

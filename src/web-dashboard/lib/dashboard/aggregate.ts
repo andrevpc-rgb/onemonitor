@@ -1,4 +1,5 @@
 import type { DeviceRow, UsageEventRow } from "@/lib/supabase/types";
+import { displayDeviceName } from "@/lib/dashboard/deviceDisplay";
 
 export interface AggregatedUsage {
   label: string;
@@ -47,7 +48,7 @@ export interface DeviceProductivity {
  */
 export function aggregateActiveVsIdleByDevice(
   events: UsageEventRow[],
-  devices: Pick<DeviceRow, "device_id" | "hostname">[],
+  devices: Pick<DeviceRow, "device_id" | "hostname" | "device_name">[],
 ): DeviceProductivity[] {
   const totals = new Map<string, { activeSeconds: number; idleSeconds: number }>();
   for (const device of devices) {
@@ -70,7 +71,7 @@ export function aggregateActiveVsIdleByDevice(
   return devices
     .map((device) => ({
       deviceId: device.device_id,
-      label: device.hostname || device.device_id,
+      label: displayDeviceName(device),
       ...(totals.get(device.device_id) ?? { activeSeconds: 0, idleSeconds: 0 }),
     }))
     .sort((a, b) => b.activeSeconds + b.idleSeconds - (a.activeSeconds + a.idleSeconds));

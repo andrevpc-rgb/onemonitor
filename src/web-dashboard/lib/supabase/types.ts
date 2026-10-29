@@ -22,7 +22,10 @@ export interface DeviceRow {
   id: string;
   device_id: string;
   organization_id: string | null;
+  /** Relatado pelo agente (Environment.MachineName + UserName), atualizado a cada sync. */
   hostname: string | null;
+  /** Rótulo exibido no dashboard — editável em /devices; ver lib/dashboard/deviceDisplay.ts. */
+  device_name: string | null;
   first_seen_at: string;
   last_seen_at: string;
   status: DeviceStatus;

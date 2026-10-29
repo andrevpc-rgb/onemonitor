@@ -2,8 +2,9 @@ import { Suspense } from "react";
 import { connection } from "next/server";
 import Link from "next/link";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { revokeDevice, restoreDevice } from "@/lib/devices/actions";
+import { revokeDevice, restoreDevice, renameDevice } from "@/lib/devices/actions";
 import type { DeviceRow } from "@/lib/supabase/types";
+import { displayDeviceName } from "@/lib/dashboard/deviceDisplay";
 import { formatDate, formatDateTime } from "@/lib/dashboard/format";
 
 type SearchParams = Promise<{ error?: string }>;
@@ -63,8 +64,8 @@ async function DevicesData({ searchParams }: { searchParams: SearchParams }) {
       {error && <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</p>}
       {!canManage && (
         <p className="rounded-md p-3 text-sm" style={{ background: "#fdf3e1", color: "#6b4a06" }}>
-          Só proprietários e gestores podem revogar o acesso de um dispositivo — você está
-          vendo a lista como leitura.
+          Só proprietários e gestores podem renomear ou revogar o acesso de um dispositivo —
+          você está vendo a lista como leitura.
         </p>
       )}
 
@@ -88,7 +89,26 @@ async function DevicesData({ searchParams }: { searchParams: SearchParams }) {
               const revoked = !!device.revoked_at;
               return (
                 <tr key={device.id} className="border-b">
-                  <td className="py-2 pr-3 font-medium">{device.hostname || device.device_id}</td>
+                  <td className="py-2 pr-3 font-medium">
+                    {canManage ? (
+                      <form action={renameDevice} className="flex items-center gap-1.5">
+                        <input type="hidden" name="deviceRowId" value={device.id} />
+                        <input
+                          type="text"
+                          name="deviceName"
+                          defaultValue={displayDeviceName(device)}
+                          required
+                          className="w-40 rounded-md border px-2 py-1 text-sm"
+                          style={{ borderColor: "#e1e0d9" }}
+                        />
+                        <button type="submit" className="text-xs font-medium underline" style={{ color: "#52514e" }}>
+                          Salvar
+                        </button>
+                      </form>
+                    ) : (
+                      displayDeviceName(device)
+                    )}
+                  </td>
                   <td className="py-2 pr-3 tabular-nums" style={{ color: "#52514e" }}>
                     {formatDateTime(device.last_seen_at)}
                   </td>

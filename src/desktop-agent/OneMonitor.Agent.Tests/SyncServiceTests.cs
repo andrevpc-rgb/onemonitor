@@ -30,6 +30,36 @@ public class SyncServiceTests
     }
 
     [Fact]
+    public async Task SyncPendingAsync_WithDeviceName_IncludesItOnTheBatch()
+    {
+        var repository = new InMemoryActivityRepository();
+        var apiClient = new FakeSyncApiClient();
+        var service = new SyncService(
+            repository, apiClient, new ManualClock(DateTimeOffset.UtcNow), new FakeAsyncDelay(),
+            new FakeCategoryResolver(), "device-1", deviceName: "DESKTOP-ANDRE (andre)");
+
+        await service.SyncPendingAsync();
+
+        var batch = Assert.Single(apiClient.ReceivedBatches);
+        Assert.Equal("DESKTOP-ANDRE (andre)", batch.DeviceName);
+    }
+
+    [Fact]
+    public async Task SendStatusAsync_WithDeviceName_IncludesItOnTheBatch()
+    {
+        var repository = new InMemoryActivityRepository();
+        var apiClient = new FakeSyncApiClient(SyncResponse.Success());
+        var service = new SyncService(
+            repository, apiClient, new ManualClock(DateTimeOffset.UtcNow), new FakeAsyncDelay(),
+            new FakeCategoryResolver(), "device-1", deviceName: "DESKTOP-ANDRE (andre)");
+
+        await service.SendStatusAsync(DeviceStatusEvent.Started);
+
+        var batch = Assert.Single(apiClient.ReceivedBatches);
+        Assert.Equal("DESKTOP-ANDRE (andre)", batch.DeviceName);
+    }
+
+    [Fact]
     public async Task SyncPendingAsync_WithPendingRecords_AlsoIncludesHeartbeatStatus()
     {
         var repository = new InMemoryActivityRepository();
