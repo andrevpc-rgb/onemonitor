@@ -475,3 +475,56 @@ select cron.schedule(
     '0 3 * * *',
     $$select public.purge_expired_usage_events();$$
 );
+
+-- ---------------------------------------------------------------------------
+-- Migração "Hardening" — Rate limiting de /api/sync.
+--
+-- Vercel roda cada request numa função serverless potencialmente nova, então um contador
+-- em memória não sobreviveria entre requisições — por isso o contador mora no Postgres
+-- (já provisionado) em vez de um serviço novo (Redis/Upstash) que o projeto não tem.
+--
+-- Sem RLS com policies permissivas de propósito (mesmo padrão de devices/usage_events nas
+-- Fases 4/6): só o service_role (via check_sync_rate_limit, chamada por
+-- app/api/sync/route.ts) ou a própria função (security definer) tocam esta tabela.
+--
+-- Idempotente: seguro rodar de novo num banco onde esta migração já foi aplicada.
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.api_rate_limit_buckets (
+    device_id      text not null,
+    window_start   timestamptz not null,
+    request_count  integer not null default 0,
+    primary key (device_id, window_start)
+);
+
+comment on table public.api_rate_limit_buckets is
+    'Contador de requisições por dispositivo e janela de 1 minuto, usado por check_sync_rate_limit() para proteger /api/sync de sobrecarga.';
+
+alter table public.api_rate_limit_buckets enable row level security;
+
+create or replace function public.check_sync_rate_limit(p_device_id text, p_max_requests integer default 20)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    v_window timestamptz := date_trunc('minute', now());
+    v_count  integer;
+begin
+    insert into public.api_rate_limit_buckets (device_id, window_start, request_count)
+    values (p_device_id, v_window, 1)
+    on conflict (device_id, window_start)
+        do update set request_count = api_rate_limit_buckets.request_count + 1
+    returning request_count into v_count;
+
+    -- Limpeza oportunista de janelas antigas a cada chamada — evita crescimento indefinido
+    -- da tabela sem precisar de um segundo job de pg_cron só para isso.
+    delete from public.api_rate_limit_buckets where window_start < v_window - interval '10 minutes';
+
+    return v_count <= p_max_requests;
+end;
+$$;
+
+comment on function public.check_sync_rate_limit(text, integer) is
+    'Incrementa o contador do dispositivo na janela de 1 minuto corrente e devolve se ainda está dentro do limite (default 20 req/min). Chamada por app/api/sync/route.ts antes de processar o lote.';

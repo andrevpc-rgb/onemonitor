@@ -53,6 +53,22 @@ export async function POST(request: Request) {
   const batch: SyncBatch = payload;
   const organizationId = organization.id;
 
+  // Hardening: limite de requisições por dispositivo (20/min) — devolve 429, que
+  // HttpSyncApiClient já trata como falha transitória (retentativa com backoff), então
+  // nenhuma mudança é necessária no agente. Contador em Postgres, não em memória: cada
+  // invocação da função serverless da Vercel pode ser uma instância nova.
+  const { data: withinRateLimit, error: rateLimitError } = await supabase.rpc("check_sync_rate_limit", {
+    p_device_id: batch.deviceId,
+  });
+
+  if (rateLimitError) {
+    return NextResponse.json({ error: rateLimitError.message }, { status: 500 });
+  }
+
+  if (!withinRateLimit) {
+    return NextResponse.json({ error: "Muitas requisições — tente novamente em instantes." }, { status: 429 });
+  }
+
   // Fase 8: um dispositivo revogado (ver /devices) nunca mais sincroniza, mesmo com uma
   // api_key de organização válida — rejeitado antes de qualquer upsert. 403 já cai na
   // classificação de falha permanente que HttpSyncApiClient já faz hoje (4xx, sem

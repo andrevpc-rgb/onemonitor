@@ -1,7 +1,15 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
-const PUBLIC_PATHS = ["/login", "/signup"];
+// Páginas de autenticação: sem sessão, ficam acessíveis; com sessão, redirecionam pra "/"
+// (não faz sentido logar de novo ou recriar organização já tendo uma sessão ativa).
+const AUTH_PATHS = ["/login", "/signup"];
+
+// Sempre acessíveis, independente de sessão — nunca redirecionadas em nenhum sentido.
+// /auth/callback troca o "code" do link de convite pela sessão (precisa rodar sem sessão
+// prévia: é ela quem cria a sessão). /privacy e /terms são públicas por natureza (link no
+// rodapé de login/cadastro, mas também podem ser abertas por quem já está logado).
+const ALWAYS_PUBLIC_PATHS = ["/auth/callback", "/privacy", "/terms"];
 
 /**
  * Renova a sessão do Supabase Auth a cada requisição (os tokens expiram e precisam ser
@@ -36,13 +44,19 @@ export async function proxy(request: NextRequest) {
   });
 
   const { data: { user } } = await supabase.auth.getUser();
-  const isPublicPath = PUBLIC_PATHS.some((path) => request.nextUrl.pathname.startsWith(path));
+  const pathname = request.nextUrl.pathname;
+  const isAlwaysPublic = ALWAYS_PUBLIC_PATHS.some((path) => pathname.startsWith(path));
+  const isAuthPath = AUTH_PATHS.some((path) => pathname.startsWith(path));
 
-  if (!user && !isPublicPath) {
+  if (isAlwaysPublic) {
+    return response;
+  }
+
+  if (!user && !isAuthPath) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  if (user && isPublicPath) {
+  if (user && isAuthPath) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 

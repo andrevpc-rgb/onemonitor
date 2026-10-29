@@ -197,6 +197,25 @@ introduzir usuários/organizações reais.
   exportação de dados estilo LGPD self-service, e auditoria de ações de `employee` (hoje
   não há nenhuma ação sensível que um `employee` pratique).
 
+## Hardening & Go-to-Market — ✅ concluída
+
+Não é uma das 10 fases originais — um conjunto de melhorias para tornar o SaaS operável por
+mais de uma pessoa/organização paga, feito logo após a Fase 8.
+
+- **Convites de equipe**: `/team` (owner/manager convida por e-mail + papel). Usa
+  `auth.admin.inviteUserByEmail` do próprio Supabase (único envio de e-mail já disponível
+  no projeto — sem integração própria). `app/auth/callback` troca o `code` do link pela
+  sessão; `/invite/set-password` conclui o cadastro. **Aviso operacional**: o e-mail do
+  plano gratuito do Supabase é rate-limited e pensado para teste — convites em volume real
+  exigem SMTP próprio configurado em Auth → Settings no painel do Supabase.
+- **Rate limiting em `/api/sync`**: sem Redis/Upstash provisionado, o contador mora no
+  próprio Postgres (`api_rate_limit_buckets` + `check_sync_rate_limit()`, janela de 1
+  minuto, 20 req/dispositivo). Devolve 429, que `HttpSyncApiClient` já trata como falha
+  transitória — nenhuma mudança no agente.
+- **`/privacy` e `/terms`**: páginas públicas descrevendo o que é e o que não é coletado,
+  linkadas no rodapé de `/login` e `/signup`. Deixam claro que são descrição técnica, não
+  substituem revisão jurídica formal.
+
 ## Fase 9 — Insights com IA (futuro, não iniciado)
 
 - IA aplicada **somente sobre dados já consolidados** (nunca em tempo real, nunca controlando mouse/teclado/computador): resumos, comparações, sugestões de produtividade.

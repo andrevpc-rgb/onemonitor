@@ -19,6 +19,35 @@ export async function login(formData: FormData) {
   redirect("/");
 }
 
+/**
+ * Último passo do convite de equipe (ver lib/team/actions.ts): a sessão já existe (criada
+ * por app/auth/callback a partir do link do e-mail) — só falta o convidado escolher uma
+ * senha para conseguir logar normalmente depois.
+ */
+export async function completeInvite(formData: FormData) {
+  const password = String(formData.get("password") ?? "");
+  const confirmPassword = String(formData.get("confirmPassword") ?? "");
+
+  if (password.length < 6) {
+    redirect(`/invite/set-password?error=${encodeURIComponent("A senha precisa ter pelo menos 6 caracteres.")}`);
+    return;
+  }
+  if (password !== confirmPassword) {
+    redirect(`/invite/set-password?error=${encodeURIComponent("As senhas não conferem.")}`);
+    return;
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.auth.updateUser({ password });
+
+  if (error) {
+    redirect(`/invite/set-password?error=${encodeURIComponent(error.message)}`);
+    return;
+  }
+
+  redirect("/");
+}
+
 export async function logout() {
   const supabase = await createSupabaseServerClient();
   await supabase.auth.signOut();

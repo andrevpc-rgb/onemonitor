@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { login } from "@/lib/auth/actions";
+import { LegalFooter } from "@/components/LegalFooter";
 
 type SearchParams = Promise<{ error?: string }>;
 
@@ -58,6 +59,8 @@ export default function LoginPage({ searchParams }: { searchParams: SearchParams
           Cadastre sua organização
         </Link>
       </p>
+
+      <LegalFooter />
     </main>
   );
 }
