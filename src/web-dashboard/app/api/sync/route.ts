@@ -53,6 +53,20 @@ export async function POST(request: Request) {
   const batch: SyncBatch = payload;
   const organizationId = organization.id;
 
+  // Fase 8: um dispositivo revogado (ver /devices) nunca mais sincroniza, mesmo com uma
+  // api_key de organização válida — rejeitado antes de qualquer upsert. 403 já cai na
+  // classificação de falha permanente que HttpSyncApiClient já faz hoje (4xx, sem
+  // retentativa) — nenhuma mudança necessária no agente.
+  const { data: existingDevice } = await supabase
+    .from("devices")
+    .select("revoked_at")
+    .eq("device_id", batch.deviceId)
+    .maybeSingle();
+
+  if (existingDevice?.revoked_at) {
+    return NextResponse.json({ error: "Acesso deste dispositivo foi revogado." }, { status: 403 });
+  }
+
   // Fase 8: devolvido no heartbeat para o agente aplicar a trava de expediente e a regra
   // do pop-up de justificativa localmente — ver src/desktop-agent/.../JustificationPolicy.cs.
   const { data: settingsRow } = await supabase

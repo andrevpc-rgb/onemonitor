@@ -35,6 +35,7 @@ export async function updateOrganizationSettings(formData: FormData) {
     variable_break_minutes: Number(formData.get("variable_break_minutes") ?? 0),
     enable_idle_popup: formData.get("enable_idle_popup") === "on",
     popup_idle_threshold_minutes: Number(formData.get("popup_idle_threshold_minutes") ?? 0),
+    usage_events_retention_days: Number(formData.get("usage_events_retention_days") ?? 0),
   };
 
   const { error } = await supabase

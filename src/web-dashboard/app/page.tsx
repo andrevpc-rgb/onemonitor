@@ -35,6 +35,12 @@ export default function DashboardPage({ searchParams }: { searchParams: SearchPa
           </p>
         </div>
         <div className="flex items-center gap-4">
+          <Link href="/devices" className="text-sm font-medium underline">
+            Dispositivos
+          </Link>
+          <Link href="/audit" className="text-sm font-medium underline">
+            Auditoria
+          </Link>
           <Link href="/settings" className="text-sm font-medium underline">
             Configurações
           </Link>

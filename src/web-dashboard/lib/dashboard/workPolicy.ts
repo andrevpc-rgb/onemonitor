@@ -10,6 +10,7 @@ export const DEFAULT_ORGANIZATION_SETTINGS: Omit<OrganizationSettingsRow, "organ
   variable_break_minutes: 0,
   enable_idle_popup: true,
   popup_idle_threshold_minutes: 15,
+  usage_events_retention_days: 180,
 };
 
 function timeToMinutes(time: string): number {

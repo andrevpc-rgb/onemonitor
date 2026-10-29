@@ -188,6 +188,26 @@ async function SettingsData({ searchParams }: { searchParams: SearchParams }) {
           </p>
         </div>
 
+        <div className="space-y-1">
+          <label htmlFor="usage_events_retention_days" className="text-sm font-medium">
+            Reter dados de atividade por (dias)
+          </label>
+          <input
+            id="usage_events_retention_days"
+            name="usage_events_retention_days"
+            type="number"
+            min={1}
+            required
+            disabled={!canEdit}
+            defaultValue={settings.usage_events_retention_days}
+            className={inputClass}
+          />
+          <p className="text-xs" style={{ color: "#898781" }}>
+            Eventos de atividade mais antigos que isso são apagados automaticamente, todo
+            dia, por uma rotina agendada no banco.
+          </p>
+        </div>
+
         {canEdit && (
           <button
             type="submit"

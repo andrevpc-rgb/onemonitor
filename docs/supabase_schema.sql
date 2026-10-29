@@ -299,3 +299,179 @@ select o.id
 from public.organizations o
 left join public.organization_settings s on s.organization_id = o.id
 where s.organization_id is null;
+
+-- ---------------------------------------------------------------------------
+-- Migração Fase 8 — Auditoria, Gestão/Revogação de Dispositivos e Retenção.
+--
+-- Três peças independentes:
+-- 1) audit_logs: quem mudou o quê (configurações da organização, revogação de
+--    dispositivo), gravado por trigger de banco (não depende de toda Server Action
+--    lembrar de logar) — só owner/manager leem.
+-- 2) devices.revoked_at: um dispositivo revogado é rejeitado (403) pelo /api/sync —
+--    nenhuma mudança necessária no agente C#, que já trata 4xx como falha permanente.
+-- 3) organization_settings.usage_events_retention_days + expurgo automático via pg_cron.
+--
+-- Idempotente: seguro rodar de novo num banco onde a Fase 8 já foi aplicada.
+-- ---------------------------------------------------------------------------
+
+-- --- 1) Auditoria -----------------------------------------------------------
+
+create table if not exists public.audit_logs (
+    id              uuid primary key default gen_random_uuid(),
+    organization_id uuid not null references public.organizations (id) on delete cascade,
+
+    -- Quem autenticado fez a mudança — null para mudanças feitas pelo service_role (ex.:
+    -- nenhuma hoje, mas um script administrativo futuro cairia aqui) ou se o usuário foi
+    -- removido depois (on delete set null: o log fica, só perde o vínculo com a pessoa).
+    actor_id        uuid references auth.users (id) on delete set null,
+
+    action          text not null,
+    target_type     text not null,
+    target_id       text,
+    changes         jsonb,
+    created_at      timestamptz not null default now()
+);
+
+comment on table public.audit_logs is
+    'Trilha de auditoria — quem mudou o quê, gravada por trigger de banco em organization_settings e devices. Só owner/manager leem.';
+
+create index if not exists audit_logs_organization_created_idx
+    on public.audit_logs (organization_id, created_at desc);
+
+alter table public.audit_logs enable row level security;
+
+drop policy if exists audit_logs_select_own_organization on public.audit_logs;
+create policy audit_logs_select_own_organization on public.audit_logs
+    for select to authenticated
+    using (
+        organization_id = public.current_organization_id()
+        and public.current_organization_role() in ('owner', 'manager')
+    );
+
+-- Nenhuma policy de insert/update/delete para authenticated: só os triggers abaixo (security
+-- definer, portanto gravam independente de RLS) escrevem nesta tabela.
+
+create or replace function public.log_organization_settings_audit()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+    insert into public.audit_logs (organization_id, actor_id, action, target_type, target_id, changes)
+    values (
+        new.organization_id,
+        auth.uid(),
+        'organization_settings.updated',
+        'organization_settings',
+        new.organization_id::text,
+        jsonb_build_object('old', to_jsonb(old), 'new', to_jsonb(new))
+    );
+    return new;
+end;
+$$;
+
+drop trigger if exists organization_settings_audit on public.organization_settings;
+create trigger organization_settings_audit
+    after update on public.organization_settings
+    for each row
+    execute function public.log_organization_settings_audit();
+
+create or replace function public.log_device_revocation_audit()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+    -- organization_id pode ser null em dispositivos de instalações anteriores à Fase 6
+    -- que nunca sincronizaram de novo com uma api_key válida — audit_logs exige uma
+    -- organização, então esses ficam de fora do log (não há "dono" para atribuir o evento).
+    if new.organization_id is not null and new.revoked_at is distinct from old.revoked_at then
+        insert into public.audit_logs (organization_id, actor_id, action, target_type, target_id, changes)
+        values (
+            new.organization_id,
+            auth.uid(),
+            case when new.revoked_at is not null then 'device.revoked' else 'device.restored' end,
+            'device',
+            new.device_id,
+            jsonb_build_object('old_revoked_at', old.revoked_at, 'new_revoked_at', new.revoked_at)
+        );
+    end if;
+    return new;
+end;
+$$;
+
+drop trigger if exists devices_revocation_audit on public.devices;
+create trigger devices_revocation_audit
+    after update on public.devices
+    for each row
+    execute function public.log_device_revocation_audit();
+
+-- --- 2) Gestão/revogação de dispositivos ------------------------------------
+
+alter table public.devices add column if not exists revoked_at timestamptz;
+
+comment on column public.devices.revoked_at is
+    'Quando preenchido, /api/sync passa a rejeitar (403) qualquer sync deste dispositivo — ver app/api/sync/route.ts. Alternado em /devices (owner/manager).';
+
+drop policy if exists devices_update_own_organization on public.devices;
+create policy devices_update_own_organization on public.devices
+    for update to authenticated
+    using (
+        organization_id = public.current_organization_id()
+        and public.current_organization_role() in ('owner', 'manager')
+    )
+    with check (
+        organization_id = public.current_organization_id()
+        and public.current_organization_role() in ('owner', 'manager')
+    );
+
+-- --- 3) Retenção e expurgo automático ---------------------------------------
+
+alter table public.organization_settings
+    add column if not exists usage_events_retention_days integer not null default 180;
+
+alter table public.organization_settings drop constraint if exists organization_settings_retention_check;
+alter table public.organization_settings
+    add constraint organization_settings_retention_check check (usage_events_retention_days > 0);
+
+-- Em alguns projetos Supabase, habilitar pg_cron pela primeira vez exige um clique em
+-- Database > Extensions (a role usada pelo SQL Editor às vezes não tem o privilégio direto
+-- via "create extension"). Se esta linha falhar, habilite por lá e rode o script de novo.
+create extension if not exists pg_cron;
+
+create or replace function public.purge_expired_usage_events()
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+    delete from public.usage_events ue
+    using public.organization_settings os
+    where ue.organization_id = os.organization_id
+      and ue.started_at < now() - (os.usage_events_retention_days || ' days')::interval;
+
+    -- usage_events sem organization_id (instalações anteriores à Fase 6) não têm uma linha
+    -- de organization_settings para consultar o retention_days — ficam de fora do expurgo
+    -- automático de propósito, em vez de assumir um padrão arbitrário para esses dados.
+end;
+$$;
+
+comment on function public.purge_expired_usage_events() is
+    'Apaga usage_events mais antigos que organization_settings.usage_events_retention_days de cada organização. Agendada via pg_cron, 03:00 UTC diariamente.';
+
+do $$
+begin
+    if exists (select 1 from cron.job where jobname = 'purge-expired-usage-events') then
+        perform cron.unschedule('purge-expired-usage-events');
+    end if;
+end;
+$$;
+
+select cron.schedule(
+    'purge-expired-usage-events',
+    '0 3 * * *',
+    $$select public.purge_expired_usage_events();$$
+);

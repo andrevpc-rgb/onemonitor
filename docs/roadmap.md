@@ -99,7 +99,7 @@ que só não teve nada pra sincronizar; o backend não tem como saber se um disp
 - Testes automatizados (controle de autostart contra o Registro real do Windows, montagem dos
   payloads de `Started`/`Heartbeat`/`Stopped`).
 
-## Fase 6 — Autenticação, Multi-tenancy e Gestão de Organizações — em andamento neste repositório
+## Fase 6 — Autenticação, Multi-tenancy e Gestão de Organizações — ✅ concluída
 
 Escopo: introduzir usuários reais (Supabase Auth) e isolar os dados por organização —
 até aqui o dashboard mostrava uma visão única, global, de todos os dispositivos
@@ -138,35 +138,64 @@ até aqui o dashboard mostrava uma visão única, global, de todos os dispositiv
   tipos (`tsc --noEmit`) e lint (`next lint`) cobrindo os novos tipos/rotas de autenticação e
   organização no Next.js.
 
-## Fase 7 — Dashboard B2B Avançado e Elementos Visuais para Gestão — em andamento neste repositório
+## Fase 7 — Dashboard B2B Avançado e Elementos Visuais para Gestão — ✅ concluída
 
 Escopo: o dashboard deixa de ser uma visão única de "últimas 24h, todos os dispositivos" e
 ganha filtros reais (período, dispositivo) e visualizações pensadas para gestão de equipe —
 ainda sem um vínculo funcionário↔dispositivo (isso fica para uma fase futura; por ora cada
 card representa um dispositivo).
 
-- **Grid de dispositivos** (`DeviceStatusGrid`): um card por dispositivo da organização,
-  com badge Online/Ausente/Offline derivado de `devices.status` + `last_seen_at` (não é mais
-  só `status` cru — `status='stopped'` ou um `last_seen_at` muito antigo virar "Offline" é
-  lógica de leitura, calculada aqui, nunca escrita pelo agente). Sempre "ao vivo",
-  independente dos filtros de período.
+- **Grid de dispositivos** (`DeviceStatusGrid`): um card por dispositivo da organização, com
+  badge Online/Ausente/Offline derivado de `devices.status` + `last_seen_at` (não é mais só
+  `status` cru — `status='stopped'` ou um `last_seen_at` muito antigo virar "Offline" é
+  lógica de leitura, calculada aqui, nunca escrita pelo agente); busca por nome
+  (client-side) e badge de produtividade por semáforo (verde ≥90% / amarelo 75-89% /
+  vermelho <75%) do período filtrado.
 - **Filtros** (`DashboardFilters`): período (Hoje / Ontem / Últimos 7 dias) e dispositivo
-  específico, escopando todo o resto do dashboard abaixo deles.
+  específico, no topo da página, escopando tudo abaixo deles — grid incluso.
+- **`ProductivityGauge`**: gauge (donut SVG, sem lib de gráficos) com a produtividade
+  agregada da organização no período.
 - **Linha do tempo diária** (`ActivityTimeline`): barra de 24h por dispositivo (small
   multiples), com blocos de Ativo/Inativo/Não classificado proporcionais ao horário real.
-- **Produtividade** (`ProductivityBars`): Ativo vs. Inativo por dispositivo.
+- **Produtividade** (`ProductivityBars`): Ativo vs. Inativo por dispositivo, com a Jornada
+  Líquida Alvo da organização (expediente menos pausas) como referência.
 - Distribuição por categoria e ausências justificadas: componentes da Fase 4 reaproveitados,
   agora escopados pelos novos filtros em vez de uma janela fixa de 24h.
 - `lucide-react` adicionado para ícones dos badges de status e dos filtros — sem lib de
   gráficos nova (os gráficos continuam HTML/CSS puro, seguindo o skill de dataviz já usado
-  desde a Fase 4).
+  desde a Fase 4). Telas/seções inspiradas num produto de referência mas que não tinham
+  dado real no schema (férias, plano de carreira, carteira de clientes/honorário por setor,
+  insights por IA) ficaram fora de propósito — ver Fase 9 para IA.
+- `organization_settings`: expediente (`work_start_time`/`work_end_time`), pausas
+  (`mandatory_break_minutes`/`variable_break_minutes`) e regras do pop-up de justificativa
+  (`enable_idle_popup`/`popup_idle_threshold_minutes`), ajustados em `/settings`
+  (owner/manager) e devolvidos ao agente no payload de resposta do heartbeat de sync.
+  `ActivityTracker` (C#) corta um registro Idle exatamente no fim do expediente em vez de
+  deixá-lo se estender até o retorno real do usuário, e `JustificationPolicy` só dispara o
+  pop-up dentro do expediente, em dia de semana, acima do limiar configurado.
 
-## Fase 8 — Auditoria e Segurança (futuro, não iniciado)
+## Fase 8 — Auditoria, Gestão de Dispositivos e Retenção — ✅ concluída
 
-- Log de auditoria no backend (quem configurou o quê, quando; alterações de categoria/regras).
-- Rotação de chaves de API por dispositivo (hoje é uma única `SYNC_API_KEY` compartilhada).
-- Revisão/hardening de policies de RLS após a Fase 6 introduzir usuários reais.
-- Retenção e expurgo de dados configuráveis (há quanto tempo manter `usage_events`).
+Escopo: dar aos administradores da organização visibilidade sobre mudanças sensíveis e
+controle sobre quem continua sincronizando — nenhuma das duas coisas existia desde a Fase 6
+introduzir usuários/organizações reais.
+
+- **`audit_logs`**: quem mudou o quê, gravado por **trigger de banco** (não depende de toda
+  Server Action lembrar de logar) em `organization_settings` (qualquer campo alterado) e
+  `devices` (revogação/restauração de acesso) — `actor_id` vem de `auth.uid()` no próprio
+  request. RLS restringe leitura a `owner`/`manager`; tela `/audit` lista o histórico.
+- **Revogação de dispositivo**: `devices.revoked_at`; quando preenchido, `/api/sync` rejeita
+  (403) qualquer sync daquele dispositivo — nenhuma mudança necessária no agente C#, que já
+  trata 4xx como falha permanente (sem retentativa) desde a Fase 3. Tela `/devices` lista os
+  dispositivos da organização com um botão "Revogar/Restaurar acesso" (owner/manager).
+- **Retenção**: `organization_settings.usage_events_retention_days` (padrão 180 dias),
+  ajustável em `/settings`; expurgo automático via `pg_cron`
+  (`purge_expired_usage_events()`, diário) em vez de uma rota HTTP dependente de um cron
+  externo — mantém o expurgo dentro do próprio banco.
+- Fora de escopo explícito: rotação de `api_key` por dispositivo (a chave continua por
+  organização; revogação já cobre o caso de "parar de confiar numa máquina específica"),
+  exportação de dados estilo LGPD self-service, e auditoria de ações de `employee` (hoje
+  não há nenhuma ação sensível que um `employee` pratique).
 
 ## Fase 9 — Insights com IA (futuro, não iniciado)
 

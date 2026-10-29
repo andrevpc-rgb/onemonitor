@@ -26,6 +26,7 @@ export interface DeviceRow {
   first_seen_at: string;
   last_seen_at: string;
   status: DeviceStatus;
+  revoked_at: string | null;
 }
 
 export interface UsageEventRow {
@@ -60,7 +61,19 @@ export interface OrganizationSettingsRow {
   variable_break_minutes: number;
   enable_idle_popup: boolean;
   popup_idle_threshold_minutes: number;
+  usage_events_retention_days: number;
   updated_at: string;
 }
 
 export type OrganizationSettingsUpdate = Omit<OrganizationSettingsRow, "organization_id" | "updated_at">;
+
+export interface AuditLogRow {
+  id: string;
+  organization_id: string;
+  actor_id: string | null;
+  action: string;
+  target_type: string;
+  target_id: string | null;
+  changes: Record<string, unknown> | null;
+  created_at: string;
+}
