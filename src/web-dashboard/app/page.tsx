@@ -8,9 +8,10 @@ import {
   aggregateActiveVsIdleByDevice,
   aggregateByApplication,
   aggregateByCategory,
+  aggregateByProductivityClass,
   justifiedAbsences,
 } from "@/lib/dashboard/aggregate";
-import { isRangeKey, resolveDateRange, RANGE_OPTIONS, type RangeKey } from "@/lib/dashboard/dateRange";
+import { isRangeKey, resolveDateRange, RANGE_OPTIONS, RANGE_DAY_COUNT, type RangeKey } from "@/lib/dashboard/dateRange";
 import { DEFAULT_ORGANIZATION_SETTINGS, calculateNetTargetMinutes } from "@/lib/dashboard/workPolicy";
 import { assignCategoryColors } from "@/lib/viz/categoryColors";
 import { DeviceStatusGrid } from "@/components/DeviceStatusGrid";
@@ -149,8 +150,11 @@ async function DashboardData({ searchParams }: { searchParams: SearchParams }) {
   const netTargetMinutes = calculateNetTargetMinutes(settingsRow ?? DEFAULT_ORGANIZATION_SETTINGS);
 
   const periodLabel = RANGE_OPTIONS.find((o) => o.key === range)?.label ?? "Período selecionado";
-  const orgActiveSeconds = productivity.reduce((sum, d) => sum + d.activeSeconds, 0);
-  const orgIdleSeconds = productivity.reduce((sum, d) => sum + d.idleSeconds, 0);
+  const { productiveSeconds, neutralSeconds, unproductiveSeconds } = aggregateByProductivityClass(mainEvents);
+  // Jornada líquida é "por dispositivo, por dia" — multiplica pelo número de dispositivos
+  // no escopo filtrado (a meta cresce junto com a equipe) e pelos dias cobertos pelo
+  // período (sem isso, "Últimos 7 dias" bateria 100% trivialmente contra a meta de 1 dia só).
+  const targetSeconds = netTargetMinutes * 60 * filteredDevices.length * RANGE_DAY_COUNT[range];
 
   return (
     <>
@@ -158,7 +162,13 @@ async function DashboardData({ searchParams }: { searchParams: SearchParams }) {
 
       <DeviceStatusGrid devices={filteredDevices} now={now} productivity={productivity} periodLabel={periodLabel} />
 
-      <ProductivityGauge activeSeconds={orgActiveSeconds} idleSeconds={orgIdleSeconds} periodLabel={periodLabel} />
+      <ProductivityGauge
+        productiveSeconds={productiveSeconds}
+        neutralSeconds={neutralSeconds}
+        unproductiveSeconds={unproductiveSeconds}
+        targetSeconds={targetSeconds}
+        periodLabel={periodLabel}
+      />
 
       <ActivityTimeline devices={filteredDevices} events={timelineEvents} dayStartIso={timelineDayStartIso} />
 

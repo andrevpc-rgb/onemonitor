@@ -10,6 +10,13 @@ export function isRangeKey(value: string | undefined): value is RangeKey {
   return value === "today" || value === "yesterday" || value === "7d";
 }
 
+/** Dias de calendário cobertos por cada período — usado para escalar metas "por dia" (ex.: Jornada Líquida Alvo) ao longo do período filtrado. */
+export const RANGE_DAY_COUNT: Record<RangeKey, number> = {
+  today: 1,
+  yesterday: 1,
+  "7d": 7,
+};
+
 export interface ResolvedDateRange {
   sinceIso: string;
   untilIso: string;

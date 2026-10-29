@@ -50,10 +50,16 @@ public class AppSettings
             ? DatabasePath
             : Path.Combine(ResolveDataRoot(), "onemonitor.db");
 
+    /// <summary>
+    /// Caminho fixo (não acompanha ResolveDataRoot) — relatórios sempre em C:\OneMonitor\reports,
+    /// o mesmo local onde a publicação self-contained já é instalada (ver docs/roadmap.md,
+    /// Fase 5), em vez de %LOCALAPPDATA%\OneMonitor\reports. ReportFileWriter já cria a pasta
+    /// se não existir.
+    /// </summary>
     public string ResolvedReportOutputDirectory =>
         !string.IsNullOrWhiteSpace(ReportOutputDirectory)
             ? ReportOutputDirectory
-            : Path.Combine(ResolveDataRoot(), "reports");
+            : @"C:\OneMonitor\reports";
 
     // Permite "// comentários" nos arquivos de configuração (ex.: appsettings.Local.json.example,
     // que é pensado pra ser copiado direto) sem que isso derrube o parse silenciosamente.

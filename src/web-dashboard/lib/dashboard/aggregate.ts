@@ -1,17 +1,75 @@
 import type { DeviceRow, UsageEventRow } from "@/lib/supabase/types";
 import { displayDeviceName } from "@/lib/dashboard/deviceDisplay";
+import { classifyProductivity, type ProductivityClass } from "@/lib/dashboard/productivityClassification";
 
 export interface AggregatedUsage {
   label: string;
   seconds: number;
+  /** Classe dominante (mais segundos) entre os eventos deste app no período — ver aggregateByApplication. */
+  productivityClass?: ProductivityClass;
 }
 
-/** Tempo ativo por aplicativo (só eventos Active; Idle/Unclassified não contam como uso). */
+/**
+ * Tempo ativo por aplicativo (só eventos Active; Idle/Unclassified não contam como uso),
+ * com a classe de produtividade dominante de cada app (app + título da janela de cada
+ * evento, não só o nome do processo — assim "chrome.exe" com e-CAC e YouTube misturados
+ * ainda classifica cada evento corretamente antes de somar).
+ */
 export function aggregateByApplication(events: UsageEventRow[]): AggregatedUsage[] {
-  return aggregate(
-    events.filter((e) => e.activity_type === "Active"),
-    (e) => e.application_name || e.process_name,
-  );
+  const activeEvents = events.filter((e) => e.activity_type === "Active");
+
+  const totals = new Map<string, number>();
+  const classTotals = new Map<string, Record<ProductivityClass, number>>();
+
+  for (const event of activeEvents) {
+    const key = event.application_name || event.process_name;
+    totals.set(key, (totals.get(key) ?? 0) + event.duration_seconds);
+
+    const productivityClass = classifyProductivity(key, event.window_title);
+    const buckets = classTotals.get(key) ?? { productive: 0, neutral: 0, unproductive: 0 };
+    buckets[productivityClass] += event.duration_seconds;
+    classTotals.set(key, buckets);
+  }
+
+  return Array.from(totals.entries())
+    .map(([label, seconds]) => ({
+      label,
+      seconds,
+      productivityClass: dominantProductivityClass(classTotals.get(label)!),
+    }))
+    .sort((a, b) => b.seconds - a.seconds);
+}
+
+function dominantProductivityClass(buckets: Record<ProductivityClass, number>): ProductivityClass {
+  return (Object.entries(buckets) as [ProductivityClass, number][]).sort((a, b) => b[1] - a[1])[0][0];
+}
+
+export interface ProductivityClassTotals {
+  productiveSeconds: number;
+  neutralSeconds: number;
+  unproductiveSeconds: number;
+}
+
+/** Soma de tempo ativo por classe de produtividade — usado pelo Gauge (ver page.tsx). */
+export function aggregateByProductivityClass(events: UsageEventRow[]): ProductivityClassTotals {
+  const totals: ProductivityClassTotals = { productiveSeconds: 0, neutralSeconds: 0, unproductiveSeconds: 0 };
+
+  for (const event of events) {
+    if (event.activity_type !== "Active") {
+      continue;
+    }
+    const key = event.application_name || event.process_name;
+    const productivityClass = classifyProductivity(key, event.window_title);
+    if (productivityClass === "productive") {
+      totals.productiveSeconds += event.duration_seconds;
+    } else if (productivityClass === "neutral") {
+      totals.neutralSeconds += event.duration_seconds;
+    } else {
+      totals.unproductiveSeconds += event.duration_seconds;
+    }
+  }
+
+  return totals;
 }
 
 /** Tempo ativo por categoria configurável; sem categoria resolvida cai em "Outros". */

@@ -1,5 +1,6 @@
 import { formatDuration } from "@/lib/dashboard/format";
 import type { AggregatedUsage } from "@/lib/dashboard/aggregate";
+import { PRODUCTIVITY_CLASS_COLOR, PRODUCTIVITY_CLASS_LABELS } from "@/lib/dashboard/productivityClassification";
 import { EmptyState } from "./EmptyState";
 
 /**
@@ -30,11 +31,19 @@ export function AppUsageChart({ data }: { data: AggregatedUsage[] }) {
         {data.map((item) => (
           <div key={item.label} className="flex items-center gap-3">
             <span
-              className="w-28 shrink-0 truncate text-xs"
+              className="flex w-32 shrink-0 items-center gap-1.5 truncate text-xs"
               style={{ color: "var(--viz-text-secondary)" }}
               title={item.label}
             >
-              {item.label}
+              {item.productivityClass && (
+                <span
+                  className="inline-block h-2 w-2 shrink-0 rounded-full"
+                  style={{ background: PRODUCTIVITY_CLASS_COLOR[item.productivityClass] }}
+                  title={PRODUCTIVITY_CLASS_LABELS[item.productivityClass]}
+                  aria-hidden
+                />
+              )}
+              <span className="truncate">{item.label}</span>
             </span>
             <div className="h-2 flex-1" style={{ background: "var(--viz-gridline)" }}>
               <div
@@ -56,6 +65,19 @@ export function AppUsageChart({ data }: { data: AggregatedUsage[] }) {
           </div>
         ))}
       </div>
+
+      <ul className="mt-4 flex flex-wrap gap-x-4 gap-y-2">
+        {(["productive", "neutral", "unproductive"] as const).map((productivityClass) => (
+          <li key={productivityClass} className="flex items-center gap-2 text-xs" style={{ color: "var(--viz-text-secondary)" }}>
+            <span
+              className="inline-block h-2.5 w-2.5 rounded-full"
+              style={{ background: PRODUCTIVITY_CLASS_COLOR[productivityClass] }}
+              aria-hidden
+            />
+            <span>{PRODUCTIVITY_CLASS_LABELS[productivityClass]}</span>
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }
