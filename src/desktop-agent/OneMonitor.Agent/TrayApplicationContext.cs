@@ -125,7 +125,19 @@ public sealed class TrayApplicationContext : ApplicationContext
             return;
         }
 
-        _tracker.Tick();
+        try
+        {
+            _tracker.Tick();
+        }
+        catch (Exception ex)
+        {
+            // Um tick que falha não pode travar os próximos silenciosamente — ver
+            // AgentErrorLog. Sem isso (ver histórico), o processo continua "respondendo" no
+            // Gerenciador de Tarefas e a bandeja continua clicável, mas nenhuma atividade nova
+            // é gravada nem sincronizada, sem nenhum rastro de que algo deu errado.
+            AgentErrorLog.Record(nameof(OnTimerTick), ex);
+            return;
+        }
 
         var current = _tracker.CurrentRecord;
         if (current is null)
@@ -191,10 +203,11 @@ public sealed class TrayApplicationContext : ApplicationContext
             ApplySettingsIfPresent(result);
             return result;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
             // SyncService só deveria devolver falhas como SyncCycleResult, nunca lançar; isto
             // é uma rede de segurança para não derrubar o agente por um erro inesperado de sync.
+            AgentErrorLog.Record(nameof(RunSyncAsync), ex);
             return SyncCycleResult.Failed("Erro inesperado durante a sincronização.");
         }
         finally
