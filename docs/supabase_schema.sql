@@ -551,3 +551,57 @@ comment on column public.devices.hostname is
     'Nome relatado pelo agente (Environment.MachineName + UserName) — atualizado a cada sync, nunca editado manualmente.';
 comment on column public.devices.device_name is
     'Rótulo exibido no dashboard — editável em /devices (owner/manager). Preenchido a partir do hostname só na primeira vez; depois disso o agente nunca mais sobrescreve.';
+
+-- ---------------------------------------------------------------------------
+-- Migração "Regras de produtividade por organização".
+--
+-- A classificação Produtivo/Neutro/Improdutivo (ver lib/dashboard/productivityClassification.ts)
+-- até aqui era fixa no código — uma lista de palavras-chave igual para toda organização.
+-- Isso move a decisão para cada organização: uma palavra-chave (casada contra
+-- "nome do app + título da janela", case-insensitive) mapeada para uma classificação,
+-- editável em /productivity-rules (owner/manager). As regras da organização têm
+-- prioridade sobre as palavras-chave padrão do código; o padrão continua existindo como
+-- fallback para quem não configurou nada.
+--
+-- Idempotente: seguro rodar de novo num banco onde esta migração já foi aplicada.
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.organization_productivity_rules (
+    id              uuid primary key default gen_random_uuid(),
+    organization_id uuid not null references public.organizations (id) on delete cascade,
+    keyword         text not null,
+    classification  text not null check (classification in ('productive', 'neutral', 'unproductive')),
+    created_at      timestamptz not null default now(),
+
+    constraint organization_productivity_rules_keyword_not_blank check (length(trim(keyword)) > 0),
+    unique (organization_id, keyword)
+);
+
+comment on table public.organization_productivity_rules is
+    'Palavra-chave (app ou título de janela) -> Produtivo/Neutro/Improdutivo, por organização. Editável em /productivity-rules (owner/manager); tem prioridade sobre as palavras-chave padrão do código.';
+
+create index if not exists organization_productivity_rules_organization_idx
+    on public.organization_productivity_rules (organization_id);
+
+alter table public.organization_productivity_rules enable row level security;
+
+drop policy if exists organization_productivity_rules_select_own on public.organization_productivity_rules;
+create policy organization_productivity_rules_select_own on public.organization_productivity_rules
+    for select to authenticated
+    using (organization_id = public.current_organization_id());
+
+drop policy if exists organization_productivity_rules_insert_own on public.organization_productivity_rules;
+create policy organization_productivity_rules_insert_own on public.organization_productivity_rules
+    for insert to authenticated
+    with check (
+        organization_id = public.current_organization_id()
+        and public.current_organization_role() in ('owner', 'manager')
+    );
+
+drop policy if exists organization_productivity_rules_delete_own on public.organization_productivity_rules;
+create policy organization_productivity_rules_delete_own on public.organization_productivity_rules
+    for delete to authenticated
+    using (
+        organization_id = public.current_organization_id()
+        and public.current_organization_role() in ('owner', 'manager')
+    );

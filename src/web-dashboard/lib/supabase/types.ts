@@ -80,3 +80,11 @@ export interface AuditLogRow {
   changes: Record<string, unknown> | null;
   created_at: string;
 }
+
+export interface ProductivityRuleRow {
+  id: string;
+  organization_id: string;
+  keyword: string;
+  classification: "productive" | "neutral" | "unproductive";
+  created_at: string;
+}

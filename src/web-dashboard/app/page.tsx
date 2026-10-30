@@ -3,7 +3,7 @@ import { connection } from "next/server";
 import Link from "next/link";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { logout } from "@/lib/auth/actions";
-import type { DeviceRow, UsageEventRow } from "@/lib/supabase/types";
+import type { DeviceRow, ProductivityRuleRow, UsageEventRow } from "@/lib/supabase/types";
 import {
   aggregateActiveVsIdleByDevice,
   aggregateByApplication,
@@ -44,6 +44,9 @@ export default function DashboardPage({ searchParams }: { searchParams: SearchPa
           </Link>
           <Link href="/audit" className="text-sm font-medium underline">
             Auditoria
+          </Link>
+          <Link href="/productivity-rules" className="text-sm font-medium underline">
+            Regras de produtividade
           </Link>
           <Link href="/settings" className="text-sm font-medium underline">
             Configurações
@@ -139,7 +142,13 @@ async function DashboardData({ searchParams }: { searchParams: SearchParams }) {
 
   const filteredDevices = selectedDevice ? devices.filter((d) => d.device_id === selectedDevice) : devices;
 
-  const byApplication = aggregateByApplication(mainEvents).slice(0, 10);
+  const { data: ruleRows } = await supabase.from("organization_productivity_rules").select("*");
+  const productivityRules = ((ruleRows ?? []) as ProductivityRuleRow[]).map((r) => ({
+    keyword: r.keyword,
+    classification: r.classification,
+  }));
+
+  const byApplication = aggregateByApplication(mainEvents, productivityRules).slice(0, 10);
   const byCategory = aggregateByCategory(mainEvents);
   const colorByCategory = assignCategoryColors(byCategory.map((c) => c.label));
   const absences = justifiedAbsences(mainEvents);
@@ -150,7 +159,7 @@ async function DashboardData({ searchParams }: { searchParams: SearchParams }) {
   const netTargetMinutes = calculateNetTargetMinutes(settingsRow ?? DEFAULT_ORGANIZATION_SETTINGS);
 
   const periodLabel = RANGE_OPTIONS.find((o) => o.key === range)?.label ?? "Período selecionado";
-  const { productiveSeconds, neutralSeconds, unproductiveSeconds } = aggregateByProductivityClass(mainEvents);
+  const { productiveSeconds, neutralSeconds, unproductiveSeconds } = aggregateByProductivityClass(mainEvents, productivityRules);
   // Jornada líquida é "por dispositivo, por dia" — multiplica pelo número de dispositivos
   // no escopo filtrado (a meta cresce junto com a equipe) e pelos dias cobertos pelo
   // período (sem isso, "Últimos 7 dias" bateria 100% trivialmente contra a meta de 1 dia só).

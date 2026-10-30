@@ -44,14 +44,40 @@ const PRODUCTIVE_KEYWORDS = [
 
 const NEUTRAL_KEYWORDS = ["explorer.exe", "file explorer", "gerenciador de arquivos", "whatsapp"];
 
+export interface CustomProductivityRule {
+  keyword: string;
+  classification: ProductivityClass;
+}
+
 /**
  * Classifica um evento de atividade (app + título da janela) em Produtivo/Neutro/
- * Improdutivo. Checa improdutivo primeiro (maior risco de inflar a métrica de trabalho
- * silenciosamente), depois produtivo; qualquer coisa fora das listas cai em neutro — um app
- * desconhecido não deveria ser acusado de improdutivo nem contar como produtivo de graça.
+ * Improdutivo. As regras da organização (ver organization_productivity_rules em
+ * docs/supabase_schema.sql, editadas em /productivity-rules) têm prioridade sobre as
+ * palavras-chave padrão abaixo — é assim que cada organização ajusta "Claude é produtivo
+ * pra mim" sem esperar uma mudança de código. Em ambos os casos, checa improdutivo primeiro
+ * (maior risco de inflar a métrica de trabalho silenciosamente), depois produtivo; qualquer
+ * coisa fora de toda regra cai em neutro — um app desconhecido não deveria ser acusado de
+ * improdutivo nem contar como produtivo de graça.
  */
-export function classifyProductivity(applicationName: string, windowTitle: string): ProductivityClass {
+export function classifyProductivity(
+  applicationName: string,
+  windowTitle: string,
+  customRules: CustomProductivityRule[] = [],
+): ProductivityClass {
   const haystack = `${applicationName} ${windowTitle}`.toLowerCase();
+
+  const customMatch = (targetClass: ProductivityClass) =>
+    customRules.some((rule) => rule.classification === targetClass && haystack.includes(rule.keyword.toLowerCase()));
+
+  if (customMatch("unproductive")) {
+    return "unproductive";
+  }
+  if (customMatch("productive")) {
+    return "productive";
+  }
+  if (customMatch("neutral")) {
+    return "neutral";
+  }
 
   if (UNPRODUCTIVE_KEYWORDS.some((keyword) => haystack.includes(keyword))) {
     return "unproductive";

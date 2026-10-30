@@ -1,6 +1,6 @@
 import type { DeviceRow, UsageEventRow } from "@/lib/supabase/types";
 import { displayDeviceName } from "@/lib/dashboard/deviceDisplay";
-import { classifyProductivity, type ProductivityClass } from "@/lib/dashboard/productivityClassification";
+import { classifyProductivity, type ProductivityClass, type CustomProductivityRule } from "@/lib/dashboard/productivityClassification";
 
 export interface AggregatedUsage {
   label: string;
@@ -15,7 +15,10 @@ export interface AggregatedUsage {
  * evento, não só o nome do processo — assim "chrome.exe" com e-CAC e YouTube misturados
  * ainda classifica cada evento corretamente antes de somar).
  */
-export function aggregateByApplication(events: UsageEventRow[]): AggregatedUsage[] {
+export function aggregateByApplication(
+  events: UsageEventRow[],
+  customRules: CustomProductivityRule[] = [],
+): AggregatedUsage[] {
   const activeEvents = events.filter((e) => e.activity_type === "Active");
 
   const totals = new Map<string, number>();
@@ -25,7 +28,7 @@ export function aggregateByApplication(events: UsageEventRow[]): AggregatedUsage
     const key = event.application_name || event.process_name;
     totals.set(key, (totals.get(key) ?? 0) + event.duration_seconds);
 
-    const productivityClass = classifyProductivity(key, event.window_title);
+    const productivityClass = classifyProductivity(key, event.window_title, customRules);
     const buckets = classTotals.get(key) ?? { productive: 0, neutral: 0, unproductive: 0 };
     buckets[productivityClass] += event.duration_seconds;
     classTotals.set(key, buckets);
@@ -51,7 +54,10 @@ export interface ProductivityClassTotals {
 }
 
 /** Soma de tempo ativo por classe de produtividade — usado pelo Gauge (ver page.tsx). */
-export function aggregateByProductivityClass(events: UsageEventRow[]): ProductivityClassTotals {
+export function aggregateByProductivityClass(
+  events: UsageEventRow[],
+  customRules: CustomProductivityRule[] = [],
+): ProductivityClassTotals {
   const totals: ProductivityClassTotals = { productiveSeconds: 0, neutralSeconds: 0, unproductiveSeconds: 0 };
 
   for (const event of events) {
@@ -59,7 +65,7 @@ export function aggregateByProductivityClass(events: UsageEventRow[]): Productiv
       continue;
     }
     const key = event.application_name || event.process_name;
-    const productivityClass = classifyProductivity(key, event.window_title);
+    const productivityClass = classifyProductivity(key, event.window_title, customRules);
     if (productivityClass === "productive") {
       totals.productiveSeconds += event.duration_seconds;
     } else if (productivityClass === "neutral") {
