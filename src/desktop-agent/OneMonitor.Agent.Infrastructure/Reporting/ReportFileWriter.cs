@@ -17,16 +17,37 @@ public class ReportFileWriter
         return path;
     }
 
-    public string WriteHtml(ReportData report, string directory)
+    /// <param name="organization">
+    /// Nome/logo da organização (ver <see cref="OrganizationSettings.OrganizationName"/> e
+    /// <see cref="OrganizationSettings.LogoUrl"/>), devolvidos pelo heartbeat de sync e
+    /// cacheados localmente (ver FileWorkPolicyProvider) — null quando a sincronização está
+    /// desabilitada ou nenhum heartbeat teve sucesso ainda; o relatório cai no cabeçalho
+    /// genérico "OneMonitor" de sempre.
+    /// </param>
+    public string WriteHtml(ReportData report, string directory, OrganizationSettings? organization = null)
     {
         Directory.CreateDirectory(directory);
         var path = Path.Combine(directory, $"report-{report.Date:yyyy-MM-dd}.html");
-        File.WriteAllText(path, BuildHtml(report));
+        File.WriteAllText(path, BuildHtml(report, organization));
         return path;
     }
 
-    private static string BuildHtml(ReportData report)
+    private static string BuildHtml(ReportData report, OrganizationSettings? organization)
     {
+        var organizationName = string.IsNullOrWhiteSpace(organization?.OrganizationName)
+            ? null
+            : WebUtility.HtmlEncode(organization.OrganizationName);
+        var logoUrl = string.IsNullOrWhiteSpace(organization?.LogoUrl) ? null : organization.LogoUrl;
+
+        // Mesma URL pública usada no cabeçalho do dashboard web (ver OrgHeader em
+        // app/page.tsx) — bucket de Storage público, carrega sem autenticação mesmo com
+        // este HTML aberto localmente, fora do navegador logado.
+        var logoImg = logoUrl is null
+            ? ""
+            : $"""<img src="{WebUtility.HtmlEncode(logoUrl)}" alt="" style="height: 2.5rem; vertical-align: middle; margin-right: 0.75rem;" />""";
+        var heading = organizationName is null
+            ? "OneMonitor - Relatório"
+            : $"{organizationName} <span style=\"color: #666; font-weight: normal;\">— OneMonitor</span>";
         var rows = string.Join(Environment.NewLine, report.AppUsages.Select(a =>
             $"<tr><td>{WebUtility.HtmlEncode(a.ProcessName)}</td><td>{FormatDuration(a.Duration)}</td></tr>"));
 
@@ -56,17 +77,18 @@ public class ReportFileWriter
             <html lang="pt-br">
             <head>
                 <meta charset="utf-8" />
-                <title>OneMonitor - Relatório {{report.Date:yyyy-MM-dd}}</title>
+                <title>{{organizationName ?? "OneMonitor"}} - Relatório {{report.Date:yyyy-MM-dd}}</title>
                 <style>
                     body { font-family: "Segoe UI", Arial, sans-serif; margin: 2rem; color: #222; }
                     table { border-collapse: collapse; width: 100%; max-width: 640px; }
                     th, td { border: 1px solid #ccc; padding: 0.5rem; text-align: left; }
                     th { background: #f4f4f4; }
                     .summary span { display: inline-block; margin-right: 1.5rem; }
+                    .report-header { display: flex; align-items: center; margin-bottom: 0; }
                 </style>
             </head>
             <body>
-                <h1>OneMonitor - Relatório de {{report.Date:yyyy-MM-dd}}</h1>
+                <h1 class="report-header">{{logoImg}}{{heading}} - Relatório de {{report.Date:yyyy-MM-dd}}</h1>
                 <p class="summary">
                     <span><strong>Ativo:</strong> {{FormatDuration(report.TotalActive)}}</span>
                     <span><strong>Inativo:</strong> {{FormatDuration(report.TotalIdle)}}</span>

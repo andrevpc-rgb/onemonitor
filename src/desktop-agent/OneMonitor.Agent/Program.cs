@@ -43,7 +43,8 @@ internal static class Program
             repository,
             new ReportFileWriter(),
             settings.ResolvedReportOutputDirectory,
-            categoryResolver);
+            categoryResolver,
+            workPolicyProvider);
 
         var syncService = BuildSyncServiceIfEnabled(settings, repository, categoryResolver);
 

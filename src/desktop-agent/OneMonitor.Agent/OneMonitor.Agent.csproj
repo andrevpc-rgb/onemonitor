@@ -18,6 +18,13 @@
     -->
     <UseAppHost>false</UseAppHost>
     <RootNamespace>OneMonitor.Agent</RootNamespace>
+    <!--
+      Versão exibida no instalador/zip distribuído (ver scripts/package-installer.ps1) e no
+      nome do arquivo publicado no Drive — um arquivo por versão, conforme pedido. Sem
+      relação com o versionamento do Core/Infrastructure (bibliotecas internas, não
+      distribuídas isoladamente).
+    -->
+    <Version>1.0.0</Version>
   </PropertyGroup>
 
   <ItemGroup>

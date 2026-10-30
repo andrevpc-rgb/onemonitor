@@ -50,3 +50,77 @@ export async function updateOrganizationSettings(formData: FormData) {
 
   redirect("/settings?saved=1");
 }
+
+/**
+ * Nome e logo vivem em `organizations` (não `organization_settings`): são identidade da
+ * organização, não parâmetros operacionais de expediente/pausas. RLS (ver
+ * organizations_update_own em docs/supabase_schema.sql) já exige owner/manager, igual a
+ * updateOrganizationSettings acima.
+ */
+export async function updateOrganizationIdentity(formData: FormData) {
+  const supabase = await createSupabaseServerClient();
+
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) {
+    redirect("/login");
+    return;
+  }
+
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("organization_id")
+    .eq("id", userData.user.id)
+    .single();
+
+  if (profileError || !profile) {
+    redirect(`/settings?error=${encodeURIComponent("Perfil não encontrado.")}`);
+    return;
+  }
+
+  const name = String(formData.get("organization_name") ?? "").trim();
+  if (!name) {
+    redirect(`/settings?error=${encodeURIComponent("O nome da organização não pode ficar vazio.")}`);
+    return;
+  }
+
+  const update: { name: string; logo_url?: string } = { name };
+
+  // O campo de logo é opcional em todo salvamento: um <input type="file"> vazio chega aqui
+  // como um File de tamanho 0, nunca como null — por isso o filtro é por size, não por
+  // existência, senão toda submissão do formulário (mesmo só mudando o nome) apagaria o
+  // logo já salvo.
+  const logoFile = formData.get("logo");
+  if (logoFile instanceof File && logoFile.size > 0) {
+    if (!logoFile.type.startsWith("image/")) {
+      redirect(`/settings?error=${encodeURIComponent("O logo precisa ser um arquivo de imagem.")}`);
+      return;
+    }
+
+    const extension = logoFile.name.includes(".") ? logoFile.name.split(".").pop() : "png";
+    const path = `${profile.organization_id}/logo.${extension}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("organization-logos")
+      .upload(path, logoFile, { upsert: true, contentType: logoFile.type });
+
+    if (uploadError) {
+      redirect(`/settings?error=${encodeURIComponent(`Erro ao enviar o logo: ${uploadError.message}`)}`);
+      return;
+    }
+
+    const { data: publicUrlData } = supabase.storage.from("organization-logos").getPublicUrl(path);
+    // Cache-busting: a URL pública é sempre a mesma para o mesmo path (upsert sobrescreve o
+    // objeto), então sem isso o navegador/relatório continuaria mostrando o logo antigo em
+    // cache depois de uma troca.
+    update.logo_url = `${publicUrlData.publicUrl}?v=${Date.now()}`;
+  }
+
+  const { error } = await supabase.from("organizations").update(update).eq("id", profile.organization_id);
+
+  if (error) {
+    redirect(`/settings?error=${encodeURIComponent(error.message)}`);
+    return;
+  }
+
+  redirect("/settings?saved=1");
+}

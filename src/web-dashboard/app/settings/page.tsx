@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import { connection } from "next/server";
 import Link from "next/link";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { updateOrganizationSettings } from "@/lib/settings/actions";
+import { updateOrganizationSettings, updateOrganizationIdentity } from "@/lib/settings/actions";
 import {
   DEFAULT_ORGANIZATION_SETTINGS,
   calculateNetTargetMinutes,
@@ -53,6 +53,16 @@ async function SettingsData({ searchParams }: { searchParams: SearchParams }) {
     return <p className="text-sm text-red-600">Erro ao carregar seu perfil: {profileError?.message}</p>;
   }
 
+  const { data: organization, error: organizationError } = await supabase
+    .from("organizations")
+    .select("name, logo_url, api_key")
+    .eq("id", profile.organization_id)
+    .single();
+
+  if (organizationError || !organization) {
+    return <p className="text-sm text-red-600">Erro ao carregar a organização: {organizationError?.message}</p>;
+  }
+
   const { data: settingsRow, error: settingsError } = await supabase
     .from("organization_settings")
     .select("*")
@@ -83,6 +93,84 @@ async function SettingsData({ searchParams }: { searchParams: SearchParams }) {
           valores atuais.
         </p>
       )}
+
+      <section className="space-y-4 rounded-lg border p-4">
+        <h2 className="text-sm font-semibold">Identidade da organização</h2>
+        <p className="text-xs" style={{ color: "#898781" }}>
+          Nome e logo exibidos no cabeçalho do dashboard e nos relatórios gerados pelo
+          agente desktop.
+        </p>
+
+        <div className="space-y-1">
+          <span className="text-sm font-medium">Chave de API do agente (Sync.ApiKey)</span>
+          <input
+            type="text"
+            readOnly
+            value={organization.api_key}
+            onFocus={(e) => e.currentTarget.select()}
+            className={`${inputClass} font-mono`}
+          />
+          <p className="text-xs" style={{ color: "#898781" }}>
+            Cole este valor em <code>Sync.ApiKey</code> no <code>appsettings.Local.json</code>
+            {" "}de cada computador que for monitorado por esta organização.
+          </p>
+        </div>
+
+        <form action={updateOrganizationIdentity} className="space-y-4" encType="multipart/form-data">
+          <div className="space-y-1">
+            <label htmlFor="organization_name" className="text-sm font-medium">
+              Nome da organização
+            </label>
+            <input
+              id="organization_name"
+              name="organization_name"
+              type="text"
+              required
+              maxLength={120}
+              disabled={!canEdit}
+              defaultValue={organization.name}
+              className={inputClass}
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label htmlFor="logo" className="text-sm font-medium">
+              Logo
+            </label>
+            <div className="flex items-center gap-3">
+              {organization.logo_url && (
+                // eslint-disable-next-line @next/next/no-img-element -- URL externa (Supabase Storage), sem benefício de next/image aqui
+                <img
+                  src={organization.logo_url}
+                  alt={`Logo de ${organization.name}`}
+                  className="h-12 w-12 rounded border object-contain"
+                />
+              )}
+              <input
+                id="logo"
+                name="logo"
+                type="file"
+                accept="image/*"
+                disabled={!canEdit}
+                className="text-sm"
+              />
+            </div>
+            <p className="text-xs" style={{ color: "#898781" }}>
+              Imagem (PNG, JPG ou SVG). Deixe em branco para manter o logo atual.
+            </p>
+          </div>
+
+          {canEdit && (
+            <button
+              type="submit"
+              className="rounded-md px-3 py-2 text-sm font-medium text-white"
+              style={{ background: "#0b0b0b" }}
+            >
+              Salvar identidade
+            </button>
+          )}
+        </form>
+      </section>
 
       <p className="text-sm" style={{ color: "#52514e" }}>
         Jornada líquida alvo: <strong>{formatMinutesAsHours(netMinutes)}</strong> (expediente

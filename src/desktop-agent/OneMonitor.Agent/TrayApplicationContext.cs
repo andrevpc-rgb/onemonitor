@@ -64,6 +64,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         _timer.Start();
 
         _tracker.IdleReturned += OnIdleReturned;
+        _tracker.UnproductiveActivityDetected += OnUnproductiveActivityDetected;
 
         if (_syncService is not null)
         {
@@ -102,6 +103,19 @@ public sealed class TrayApplicationContext : ApplicationContext
         {
             _timer.Start();
         }
+    }
+
+    // Balão não-modal (ao contrário do pop-up de justificativa): só avisa, não interrompe o
+    // que o usuário está fazendo nem pausa o polling. Dispara uma vez por transição (ver
+    // ActivityTracker.RaiseIfUnproductive) — trocar de aba dentro do mesmo app/site não repete.
+    private void OnUnproductiveActivityDetected(object? sender, UnproductiveActivityDetectedEventArgs e)
+    {
+        _trayIcon.BalloonTipIcon = ToolTipIcon.Warning;
+        _trayIcon.BalloonTipTitle = "OneMonitor - Atividade improdutiva";
+        _trayIcon.BalloonTipText = TrimToolTip(
+            $"Você está em \"{e.ProcessName}\" ({e.WindowTitle}), classificado como improdutivo pela sua organização.",
+            maxLength: 255);
+        _trayIcon.ShowBalloonTip(8000);
     }
 
     private void OnTimerTick(object? sender, EventArgs e)
@@ -242,14 +256,17 @@ public sealed class TrayApplicationContext : ApplicationContext
         }
     }
 
-    // NotifyIcon.Text aceita no máximo 63 caracteres.
-    private static string TrimToolTip(string text) => text.Length <= 63 ? text : text[..63];
+    // NotifyIcon.Text aceita no máximo 63 caracteres; BalloonTipText aceita até 255 (ver
+    // chamada em OnUnproductiveActivityDetected).
+    private static string TrimToolTip(string text, int maxLength = 63) =>
+        text.Length <= maxLength ? text : text[..maxLength];
 
     protected override void Dispose(bool disposing)
     {
         if (disposing)
         {
             _tracker.IdleReturned -= OnIdleReturned;
+            _tracker.UnproductiveActivityDetected -= OnUnproductiveActivityDetected;
             _timer.Dispose();
             _syncTimer?.Dispose();
             _trayIcon.Dispose();

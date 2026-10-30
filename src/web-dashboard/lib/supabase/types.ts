@@ -8,6 +8,8 @@ export interface OrganizationRow {
   name: string;
   slug: string;
   api_key: string;
+  /** URL pública no bucket de Storage organization-logos; null = sem logo. */
+  logo_url: string | null;
   created_at: string;
 }
 

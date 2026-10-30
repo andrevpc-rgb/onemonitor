@@ -31,7 +31,9 @@ export default function DashboardPage({ searchParams }: { searchParams: SearchPa
     <main className="mx-auto max-w-5xl space-y-6 p-6">
       <header className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold">OneMonitor — Dashboard</h1>
+          <Suspense fallback={<h1 className="text-xl font-semibold">OneMonitor — Dashboard</h1>}>
+            <OrgHeader />
+          </Suspense>
           <p className="text-sm" style={{ color: "#898781" }}>
             Visão da sua organização, com filtro por período e dispositivo.
           </p>
@@ -70,6 +72,37 @@ export default function DashboardPage({ searchParams }: { searchParams: SearchPa
         <DashboardData searchParams={searchParams} />
       </Suspense>
     </main>
+  );
+}
+
+/**
+ * Nome/logo da organização no cabeçalho — num Suspense próprio (em vez de dentro de
+ * DashboardData) porque o header não depende do resto dos dados do dashboard e não deve
+ * esperar por eles; se a busca falhar ou ainda não tiver carregado, cai no fallback
+ * "OneMonitor — Dashboard" acima, nunca quebra a página.
+ */
+async function OrgHeader() {
+  await connection();
+
+  const supabase = await createSupabaseServerClient();
+  // RLS (organizations_select_own, ver docs/supabase_schema.sql) já restringe à própria
+  // organização — mesmo padrão de organization_settings mais abaixo.
+  const { data: organization } = await supabase.from("organizations").select("name, logo_url").maybeSingle();
+
+  return (
+    <div className="flex items-center gap-2">
+      {organization?.logo_url && (
+        // eslint-disable-next-line @next/next/no-img-element -- URL externa (Supabase Storage)
+        <img
+          src={organization.logo_url}
+          alt={`Logo de ${organization.name}`}
+          className="h-8 w-8 rounded object-contain"
+        />
+      )}
+      <h1 className="text-xl font-semibold">
+        {organization?.name ? `${organization.name} — OneMonitor` : "OneMonitor — Dashboard"}
+      </h1>
+    </div>
   );
 }
 

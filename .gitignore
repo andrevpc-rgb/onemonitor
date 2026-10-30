@@ -33,3 +33,6 @@ appsettings.Local.json
 ## OS
 Thumbs.db
 .DS_Store
+
+## Pacotes gerados por scripts/package-installer.ps1 (sobem pro Drive, não pro git)
+dist/

@@ -632,3 +632,112 @@ create policy organization_productivity_rules_update_own on public.organization_
         organization_id = public.current_organization_id()
         and public.current_organization_role() in ('owner', 'manager')
     );
+
+-- ---------------------------------------------------------------------------
+-- Migração "Identidade visual da organização (nome editável e logo)".
+--
+-- organizations.name já existia (preenchido no cadastro), mas sem UI para editar depois e
+-- sem um campo de logo. logo_url guarda a URL pública do objeto no bucket de Storage
+-- 'organization-logos' (ver abaixo) — o nome e o logo aparecem no cabeçalho do dashboard
+-- (/, via componente OrgBranding) e são devolvidos ao agente desktop no heartbeat de sync
+-- (/api/sync, mesmo payload `settings` que já leva work hours/pop-up) para irem embutidos
+-- no relatório HTML gerado localmente (ReportFileWriter) — por isso logo_url precisa ser
+-- acessível sem autenticação (bucket público: um logo não é dado sensível).
+--
+-- Idempotente: seguro rodar de novo num banco onde esta migração já foi aplicada.
+-- ---------------------------------------------------------------------------
+
+alter table public.organizations add column if not exists logo_url text;
+
+comment on column public.organizations.logo_url is
+    'URL pública do logo no bucket de Storage organization-logos (null = sem logo, usa só o nome/marca padrão).';
+
+-- Só havia policy de select para organizations (dashboard era read-only) — esta soma
+-- update, restrito a owner/manager da própria organização, a mesma regra de
+-- organization_settings. name/logo_url são os únicos campos que a Server Action de
+-- /settings de fato envia; slug/api_key/id/created_at não são expostos no formulário.
+drop policy if exists organizations_update_own on public.organizations;
+create policy organizations_update_own on public.organizations
+    for update to authenticated
+    using (
+        id = public.current_organization_id()
+        and public.current_organization_role() in ('owner', 'manager')
+    )
+    with check (
+        id = public.current_organization_id()
+        and public.current_organization_role() in ('owner', 'manager')
+    );
+
+create or replace function public.log_organization_identity_audit()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+    if new.name is distinct from old.name or new.logo_url is distinct from old.logo_url then
+        insert into public.audit_logs (organization_id, actor_id, action, target_type, target_id, changes)
+        values (
+            new.id,
+            auth.uid(),
+            'organization.identity_updated',
+            'organization',
+            new.id::text,
+            jsonb_build_object(
+                'old', jsonb_build_object('name', old.name, 'logo_url', old.logo_url),
+                'new', jsonb_build_object('name', new.name, 'logo_url', new.logo_url)
+            )
+        );
+    end if;
+    return new;
+end;
+$$;
+
+drop trigger if exists organization_identity_audit on public.organizations;
+create trigger organization_identity_audit
+    after update on public.organizations
+    for each row
+    execute function public.log_organization_identity_audit();
+
+-- Bucket público: o logo precisa carregar sem sessão no relatório HTML aberto localmente
+-- pelo funcionário (fora do navegador autenticado do dashboard). `public = true` faz a
+-- Storage API servir qualquer objeto do bucket via URL pública, ignorando RLS na leitura;
+-- RLS continua valendo para insert/update/delete (abaixo), então só owner/manager da
+-- organização dona da pasta consegue trocar o logo.
+insert into storage.buckets (id, name, public)
+values ('organization-logos', 'organization-logos', true)
+on conflict (id) do update set public = true;
+
+-- Convenção de caminho: '{organization_id}/logo.<ext>' — (storage.foldername(name))[1] é o
+-- primeiro segmento do caminho, comparado à organização do usuário autenticado.
+drop policy if exists organization_logos_insert_own on storage.objects;
+create policy organization_logos_insert_own on storage.objects
+    for insert to authenticated
+    with check (
+        bucket_id = 'organization-logos'
+        and (storage.foldername(name))[1] = public.current_organization_id()::text
+        and public.current_organization_role() in ('owner', 'manager')
+    );
+
+drop policy if exists organization_logos_update_own on storage.objects;
+create policy organization_logos_update_own on storage.objects
+    for update to authenticated
+    using (
+        bucket_id = 'organization-logos'
+        and (storage.foldername(name))[1] = public.current_organization_id()::text
+        and public.current_organization_role() in ('owner', 'manager')
+    )
+    with check (
+        bucket_id = 'organization-logos'
+        and (storage.foldername(name))[1] = public.current_organization_id()::text
+        and public.current_organization_role() in ('owner', 'manager')
+    );
+
+drop policy if exists organization_logos_delete_own on storage.objects;
+create policy organization_logos_delete_own on storage.objects
+    for delete to authenticated
+    using (
+        bucket_id = 'organization-logos'
+        and (storage.foldername(name))[1] = public.current_organization_id()::text
+        and public.current_organization_role() in ('owner', 'manager')
+    );

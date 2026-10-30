@@ -52,6 +52,15 @@ public class ActivityTracker
     /// </summary>
     public event EventHandler<IdleReturnedEventArgs>? IdleReturned;
 
+    /// <summary>
+    /// Disparado quando uma nova atividade Ativa é aberta (processo/janela diferente do
+    /// registro anterior — ver agrupamento em <see cref="Tick"/>) e é classificada como
+    /// Improdutiva pelas regras vigentes (<see cref="ProductivityClassifier"/>, com as regras
+    /// da organização em <see cref="IWorkPolicyProvider.Current"/>). Dispara uma vez por
+    /// transição, não a cada tick — a TrayApplicationContext decide como alertar o usuário.
+    /// </summary>
+    public event EventHandler<UnproductiveActivityDetectedEventArgs>? UnproductiveActivityDetected;
+
     public void Tick()
     {
         var now = _clock.UtcNow;
@@ -90,6 +99,7 @@ public class ActivityTracker
         if (_openRecord is null)
         {
             _openRecord = CreateRecord(type, processName, windowTitle, now);
+            RaiseIfUnproductive(_openRecord);
             return;
         }
 
@@ -110,6 +120,7 @@ public class ActivityTracker
             var closedRecord = _openRecord;
             var closedRecordId = _repository.SaveClosedRecord(closedRecord);
             _openRecord = CreateRecord(type, processName, windowTitle, now);
+            RaiseIfUnproductive(_openRecord);
 
             if (closedRecord.Type == ActivityType.Idle && type != ActivityType.Idle)
             {
@@ -172,6 +183,23 @@ public class ActivityTracker
             workEndTime.Hour, workEndTime.Minute, workEndTime.Second,
             local.Offset);
         return boundaryLocal.ToUniversalTime();
+    }
+
+    private void RaiseIfUnproductive(ActivityRecord record)
+    {
+        if (record.Type != ActivityType.Active)
+        {
+            return;
+        }
+
+        var classification = ProductivityClassifier.Classify(
+            record.ProcessName, record.WindowTitle, _workPolicyProvider.Current.ProductivityRules);
+
+        if (classification == ProductivityClass.Unproductive)
+        {
+            UnproductiveActivityDetected?.Invoke(
+                this, new UnproductiveActivityDetectedEventArgs(record.ProcessName, record.WindowTitle));
+        }
     }
 
     private static ActivityRecord CreateRecord(ActivityType type, string processName, string windowTitle, DateTimeOffset now) =>

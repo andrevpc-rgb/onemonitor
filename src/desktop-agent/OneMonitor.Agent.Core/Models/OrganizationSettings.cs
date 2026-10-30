@@ -12,7 +12,10 @@ public sealed record OrganizationSettings(
     TimeOnly WorkStartTime,
     TimeOnly WorkEndTime,
     bool EnableIdlePopup,
-    int PopupIdleThresholdMinutes)
+    int PopupIdleThresholdMinutes,
+    string? OrganizationName = null,
+    string? LogoUrl = null,
+    IReadOnlyList<ProductivityRuleDto>? ProductivityRules = null)
 {
     /// <summary>
     /// Política usada quando não há organização (sincronização desabilitada) ou antes do

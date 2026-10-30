@@ -146,6 +146,16 @@ Os gráficos (`components/AppUsageChart.tsx`, `CategoryBreakdownChart.tsx`) segu
 
 `src/web-dashboard/lib/sync/contracts.ts` e `lib/supabase/types.ts` espelham manualmente `ActivitySyncEvent`/`SyncBatch` do C#. Não há geração automática entre os dois ecossistemas — qualquer mudança de contrato precisa ser replicada nos dois lados (e os testes de cada lado atualizados).
 
+## Identidade da organização (nome e logo)
+
+`organizations.name`/`logo_url` (ver docs/supabase_schema.sql) são editáveis em `/settings` (owner/manager) — `logo_url` é a URL pública de um objeto no bucket de Storage `organization-logos` (bucket público: o logo precisa carregar sem sessão tanto no cabeçalho do dashboard quanto no relatório HTML aberto localmente pelo funcionário). O mesmo payload `settings` devolvido pelo heartbeat de sync (`/api/sync`) leva `organizationName`/`logoUrl` para o agente desktop, que os cacheia junto com a política de expediente (`FileWorkPolicyProvider`) e os embute no cabeçalho do relatório HTML (`ReportFileWriter`).
+
+## Alerta de atividade improdutiva em tempo real
+
+`ActivityTracker` expõe `UnproductiveActivityDetected`, disparado quando uma nova atividade **Ativa** é aberta (mudança de processo/janela — mesmo ponto de `IdleReturned`) e `ProductivityClassifier.Classify` a classifica como Improdutiva. `ProductivityClassifier` (Core) é um porte manual de `classifyProductivity` (`lib/dashboard/productivityClassification.ts`): mesma ordem de prioridade (regra da organização improdutiva → produtiva → neutra, depois as palavras-chave padrão do código, senão Neutro) e as mesmas duas listas de palavras-chave — as duas cópias precisam ser mantidas iguais manualmente, mesmo acordo informal que já vale para `ActivitySyncEvent`/`contracts.ts`.
+
+As regras da organização (`organization_productivity_rules`) chegam ao agente pelo mesmo payload `settings` do heartbeat (`OrganizationSettings.ProductivityRules`), reaproveitando o cache local e a sobrevivência a reinício que `FileWorkPolicyProvider` já dava à política de expediente — nenhum mecanismo novo de persistência foi necessário. `TrayApplicationContext` assina o evento e mostra um balão não-modal (`NotifyIcon.ShowBalloonTip`) com o processo/janela — ao contrário do pop-up de justificativa, não pausa o polling nem exige uma resposta do usuário, só avisa.
+
 ## Extensibilidade para fases futuras
 
 - `ReportData` é um modelo plano, serializável, que pode ser reaproveitado por uma camada de insights de IA (Fase 6) sem reprocessar os dados brutos.

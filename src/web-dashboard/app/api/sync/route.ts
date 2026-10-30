@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { isValidSyncBatch, type DeviceStatusState, type SyncBatch } from "@/lib/sync/contracts";
-import type { DeviceStatus, OrganizationSettingsRow, UsageEventInsert } from "@/lib/supabase/types";
+import type { DeviceStatus, OrganizationSettingsRow, ProductivityRuleRow, UsageEventInsert } from "@/lib/supabase/types";
 import { DEFAULT_ORGANIZATION_SETTINGS } from "@/lib/dashboard/workPolicy";
 import { extractDiscoveryKeyword } from "@/lib/dashboard/productivityClassification";
 
@@ -28,7 +28,7 @@ export async function POST(request: Request) {
 
   const { data: organization, error: organizationError } = await supabase
     .from("organizations")
-    .select("id")
+    .select("id, name, logo_url")
     .eq("api_key", apiKey)
     .maybeSingle();
 
@@ -91,7 +91,17 @@ export async function POST(request: Request) {
     .select("work_start_time, work_end_time, enable_idle_popup, popup_idle_threshold_minutes")
     .eq("organization_id", organizationId)
     .maybeSingle();
-  const settings = toAgentSettings(settingsRow ?? DEFAULT_ORGANIZATION_SETTINGS);
+
+  // Mesmas regras usadas em classifyProductivity (lib/dashboard/productivityClassification.ts)
+  // para os agregados do dashboard — devolvidas aqui para o agente aplicar em tempo real
+  // (ver ProductivityClassifier.cs) e alertar o usuário já no momento em que abre o app/site,
+  // em vez de só depois do próximo sync.
+  const { data: ruleRows } = await supabase
+    .from("organization_productivity_rules")
+    .select("keyword, classification")
+    .eq("organization_id", organizationId);
+
+  const settings = toAgentSettings(settingsRow ?? DEFAULT_ORGANIZATION_SETTINGS, organization, ruleRows ?? []);
 
   const deviceUpsert: {
     device_id: string;
@@ -188,16 +198,24 @@ function toDeviceStatus(state: DeviceStatusState): DeviceStatus {
 }
 
 /**
- * camelCase e só os 4 campos que o agente C# precisa (HttpSyncApiClient.OrganizationSettings)
+ * camelCase e só os campos que o agente C# precisa (HttpSyncApiClient.OrganizationSettings)
  * — mandatory_break_minutes/variable_break_minutes ficam só no dashboard web (Fase 7).
+ * organizationName/logoUrl (identidade da organização, não operacional) vão embutidos no
+ * mesmo payload por conveniência — é a mesma viagem de heartbeat, e o agente já ignora
+ * qualquer campo que não reconhece.
  */
 function toAgentSettings(
   row: Pick<OrganizationSettingsRow, "work_start_time" | "work_end_time" | "enable_idle_popup" | "popup_idle_threshold_minutes">,
+  organization: { name: string; logo_url: string | null },
+  productivityRules: Pick<ProductivityRuleRow, "keyword" | "classification">[],
 ) {
   return {
     workStartTime: row.work_start_time,
     workEndTime: row.work_end_time,
     enableIdlePopup: row.enable_idle_popup,
     popupIdleThresholdMinutes: row.popup_idle_threshold_minutes,
+    organizationName: organization.name,
+    logoUrl: organization.logo_url,
+    productivityRules: productivityRules.map((r) => ({ keyword: r.keyword, classification: r.classification })),
   };
 }

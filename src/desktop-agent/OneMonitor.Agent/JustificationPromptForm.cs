@@ -12,6 +12,7 @@ public sealed class JustificationPromptForm : Form
         "Reunião Presencial",
         "Suporte a Colega",
         "Visita a Cliente",
+        "Treinamento",
         "Pausa"
     };
 
