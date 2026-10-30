@@ -3,6 +3,7 @@ import { connection } from "next/server";
 import Link from "next/link";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { updateOrganizationSettings, updateOrganizationIdentity } from "@/lib/settings/actions";
+import { SelectOnFocusInput } from "@/components/SelectOnFocusInput";
 import {
   DEFAULT_ORGANIZATION_SETTINGS,
   calculateNetTargetMinutes,
@@ -103,11 +104,10 @@ async function SettingsData({ searchParams }: { searchParams: SearchParams }) {
 
         <div className="space-y-1">
           <span className="text-sm font-medium">Chave de API do agente (Sync.ApiKey)</span>
-          <input
+          <SelectOnFocusInput
             type="text"
             readOnly
             value={organization.api_key}
-            onFocus={(e) => e.currentTarget.select()}
             className={`${inputClass} font-mono`}
           />
           <p className="text-xs" style={{ color: "#898781" }}>
