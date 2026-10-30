@@ -91,6 +91,33 @@ export function classifyProductivity(
   return "neutral";
 }
 
+const BROWSER_PROCESS_NAMES = new Set(["chrome", "msedge", "firefox", "opera", "brave"]);
+
+// Títulos de navegador terminam com " - <Nome do navegador>" (Chrome/Edge/Opera/Brave) ou
+// " — <Nome do navegador>" (Firefox usa travessão) — ancorado no fim da string ($), então
+// só corta esse sufixo, nunca um hífen que faça parte do próprio título da página.
+const BROWSER_TITLE_SUFFIX = /\s[-—]\s(Google Chrome|Mozilla Firefox|Microsoft Edge|Opera|Brave)\s*$/i;
+
+/**
+ * Palavra-chave sugerida para a descoberta automática de regras (ver app/api/sync/route.ts).
+ * Para navegadores, "chrome"/"firefox" sozinho é vago demais — hospedam qualquer site, de
+ * uma planilha fiscal a uma rede social — então extrai o nome do site do título da janela
+ * (ex.: "Amazon.com.br" de "Amazon.com.br — Mozilla Firefox"). Para os demais apps, usa o
+ * próprio nome do processo, como antes. Retorna null quando não há nada identificável (ex.:
+ * aba em branco do navegador, sem site no título).
+ */
+export function extractDiscoveryKeyword(processName: string, windowTitle: string): string | null {
+  if (BROWSER_PROCESS_NAMES.has(processName.toLowerCase())) {
+    const match = windowTitle.match(BROWSER_TITLE_SUFFIX);
+    if (!match) {
+      return null;
+    }
+    const site = windowTitle.slice(0, match.index).trim();
+    return site.length > 0 ? site : null;
+  }
+  return processName || null;
+}
+
 /**
  * Peso do tempo Neutro na fórmula do Gauge de Produtividade: conta só pela metade — nem
  * ignorado (seria punir app desconhecido/neutro como se fosse ócio), nem peso cheio como o
