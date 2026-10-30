@@ -605,3 +605,30 @@ create policy organization_productivity_rules_delete_own on public.organization_
         organization_id = public.current_organization_id()
         and public.current_organization_role() in ('owner', 'manager')
     );
+
+-- ---------------------------------------------------------------------------
+-- Migração "Descoberta automática de apps + reclassificação em linha".
+--
+-- /api/sync passa a gravar sozinho, em cada lote ingerido, uma regra "productive" para
+-- todo process_name ainda não visto por aquela organização — o admin não parte de uma
+-- lista vazia, parte do inventário real de apps usados, e só precisa rebaixar o que for
+-- Neutro/Improdutivo. `on conflict do nothing` garante que isso nunca sobrescreve uma
+-- classificação já definida manualmente (ver app/api/sync/route.ts).
+--
+-- A policy de update que faltava é o que permite reclassificar em linha em
+-- /productivity-rules, em vez de remover e recriar a regra.
+--
+-- Idempotente: seguro rodar de novo num banco onde esta migração já foi aplicada.
+-- ---------------------------------------------------------------------------
+
+drop policy if exists organization_productivity_rules_update_own on public.organization_productivity_rules;
+create policy organization_productivity_rules_update_own on public.organization_productivity_rules
+    for update to authenticated
+    using (
+        organization_id = public.current_organization_id()
+        and public.current_organization_role() in ('owner', 'manager')
+    )
+    with check (
+        organization_id = public.current_organization_id()
+        and public.current_organization_role() in ('owner', 'manager')
+    );

@@ -54,6 +54,38 @@ export async function addProductivityRule(formData: FormData) {
   redirect("/productivity-rules");
 }
 
+/** Reclassifica uma regra existente (ex.: as que entraram sozinhas como "productive" via
+ * descoberta automática no /api/sync) sem precisar remover e recriar. */
+export async function updateProductivityRuleClassification(formData: FormData) {
+  const ruleId = String(formData.get("ruleId") ?? "");
+  const classification = String(formData.get("classification") ?? "");
+
+  if (!VALID_CLASSES.includes(classification as ProductivityClass)) {
+    redirect(`/productivity-rules?error=${encodeURIComponent("Classificação inválida.")}`);
+    return;
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) {
+    redirect("/login");
+    return;
+  }
+
+  const { error } = await supabase
+    .from("organization_productivity_rules")
+    .update({ classification })
+    .eq("id", ruleId);
+
+  if (error) {
+    redirect(`/productivity-rules?error=${encodeURIComponent(error.message)}`);
+    return;
+  }
+
+  revalidatePath("/productivity-rules");
+  redirect("/productivity-rules");
+}
+
 export async function deleteProductivityRule(formData: FormData) {
   const ruleId = String(formData.get("ruleId") ?? "");
 

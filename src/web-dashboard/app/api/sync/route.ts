@@ -129,6 +129,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ received: 0, upserted: 0, settings });
   }
 
+  // Descoberta automática: todo process_name ainda não visto por esta organização entra em
+  // organization_productivity_rules como "productive" — o admin parte de um inventário real
+  // de apps usados (ver /productivity-rules), não de uma lista vazia, e só rebaixa o que for
+  // Neutro/Improdutivo. ignoreDuplicates garante que uma classificação já definida
+  // manualmente nunca é sobrescrita. Melhor esforço: um erro aqui não derruba a ingestão
+  // real dos eventos, que é o que importa de verdade para este request.
+  const discoveredKeywords = [...new Set(batch.events.map((e) => e.processName).filter(Boolean))];
+  if (discoveredKeywords.length > 0) {
+    await supabase.from("organization_productivity_rules").upsert(
+      discoveredKeywords.map((keyword) => ({ organization_id: organizationId, keyword, classification: "productive" })),
+      { onConflict: "organization_id,keyword", ignoreDuplicates: true },
+    );
+  }
+
   const rows: UsageEventInsert[] = batch.events.map((event) => ({
     event_id: event.eventId,
     device_id: batch.deviceId,

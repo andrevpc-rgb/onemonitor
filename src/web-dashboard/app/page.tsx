@@ -14,6 +14,7 @@ import {
 import { isRangeKey, resolveDateRange, RANGE_OPTIONS, RANGE_DAY_COUNT, type RangeKey } from "@/lib/dashboard/dateRange";
 import { DEFAULT_ORGANIZATION_SETTINGS, calculateNetTargetMinutes } from "@/lib/dashboard/workPolicy";
 import { assignCategoryColors } from "@/lib/viz/categoryColors";
+import { formatRelativeTime, formatDateTime } from "@/lib/dashboard/format";
 import { DeviceStatusGrid } from "@/components/DeviceStatusGrid";
 import { DashboardFilters } from "@/components/DashboardFilters";
 import { ProductivityGauge } from "@/components/ProductivityGauge";
@@ -165,9 +166,22 @@ async function DashboardData({ searchParams }: { searchParams: SearchParams }) {
   // período (sem isso, "Últimos 7 dias" bateria 100% trivialmente contra a meta de 1 dia só).
   const targetSeconds = netTargetMinutes * 60 * filteredDevices.length * RANGE_DAY_COUNT[range];
 
+  // Mais recente last_seen_at entre os dispositivos no escopo filtrado — um "dado atualizado
+  // até" discreto, não repete o "Visto Xmin atrás" de cada card (esse é por dispositivo).
+  const lastUpdateIso = filteredDevices.reduce<string | null>(
+    (latest, d) => (!latest || d.last_seen_at > latest ? d.last_seen_at : latest),
+    null,
+  );
+
   return (
     <>
       <DashboardFilters devices={devices} selectedRange={range} selectedDevice={selectedDevice} />
+
+      {lastUpdateIso && (
+        <p className="text-xs" style={{ color: "#898781" }} title={formatDateTime(lastUpdateIso)}>
+          Dados atualizados {formatRelativeTime(lastUpdateIso, now)}
+        </p>
+      )}
 
       <DeviceStatusGrid devices={filteredDevices} now={now} productivity={productivity} periodLabel={periodLabel} />
 
