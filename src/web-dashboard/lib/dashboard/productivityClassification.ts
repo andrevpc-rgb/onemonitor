@@ -121,7 +121,7 @@ export function extractDiscoveryKeyword(processName: string, windowTitle: string
 /**
  * Peso do tempo Neutro na fórmula do Gauge de Produtividade: conta só pela metade — nem
  * ignorado (seria punir app desconhecido/neutro como se fosse ócio), nem peso cheio como o
- * Produtivo (seria equiparar "WhatsApp Web" a uma planilha fiscal). Ver ProductivityGauge.
+ * Produtivo (seria equiparar "WhatsApp Web" a uma planilha fiscal). Ver TeamProductivityOverview.
  */
 export const NEUTRAL_TIME_WEIGHT = 0.5;
 

@@ -5,21 +5,19 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { logout } from "@/lib/auth/actions";
 import type { DeviceRow, ProductivityRuleRow, UsageEventRow } from "@/lib/supabase/types";
 import {
-  aggregateActiveVsIdleByDevice,
+  aggregateProductivityByDevice,
   aggregateByApplication,
   aggregateByCategory,
-  aggregateByProductivityClass,
   justifiedAbsences,
 } from "@/lib/dashboard/aggregate";
 import { isRangeKey, resolveDateRange, RANGE_OPTIONS, RANGE_DAY_COUNT, type RangeKey } from "@/lib/dashboard/dateRange";
 import { DEFAULT_ORGANIZATION_SETTINGS, calculateNetTargetMinutes } from "@/lib/dashboard/workPolicy";
 import { assignCategoryColors } from "@/lib/viz/categoryColors";
 import { formatRelativeTime, formatDateTime } from "@/lib/dashboard/format";
-import { DeviceStatusGrid } from "@/components/DeviceStatusGrid";
 import { DashboardFilters } from "@/components/DashboardFilters";
-import { ProductivityGauge } from "@/components/ProductivityGauge";
+import { TeamProductivityOverview } from "@/components/TeamProductivityOverview";
+import { PersonProductivityGrid } from "@/components/PersonProductivityGrid";
 import { ActivityTimeline } from "@/components/ActivityTimeline";
-import { ProductivityBars } from "@/components/ProductivityBars";
 import { AppUsageChart } from "@/components/AppUsageChart";
 import { CategoryBreakdownChart } from "@/components/CategoryBreakdownChart";
 import { JustifiedAbsencesTable } from "@/components/JustifiedAbsencesTable";
@@ -186,18 +184,18 @@ async function DashboardData({ searchParams }: { searchParams: SearchParams }) {
   const byCategory = aggregateByCategory(mainEvents);
   const colorByCategory = assignCategoryColors(byCategory.map((c) => c.label));
   const absences = justifiedAbsences(mainEvents);
-  const productivity = aggregateActiveVsIdleByDevice(mainEvents, filteredDevices);
+  const productivityByDevice = aggregateProductivityByDevice(mainEvents, filteredDevices, productivityRules);
 
   // Uma linha só por organização (RLS já restringe a own org — ver docs/supabase_schema.sql).
   const { data: settingsRow } = await supabase.from("organization_settings").select("*").maybeSingle();
   const netTargetMinutes = calculateNetTargetMinutes(settingsRow ?? DEFAULT_ORGANIZATION_SETTINGS);
 
   const periodLabel = RANGE_OPTIONS.find((o) => o.key === range)?.label ?? "Período selecionado";
-  const { productiveSeconds, neutralSeconds, unproductiveSeconds } = aggregateByProductivityClass(mainEvents, productivityRules);
-  // Jornada líquida é "por dispositivo, por dia" — multiplica pelo número de dispositivos
-  // no escopo filtrado (a meta cresce junto com a equipe) e pelos dias cobertos pelo
+  // Jornada líquida é "por dispositivo, por dia" — multiplica pelos dias cobertos pelo
   // período (sem isso, "Últimos 7 dias" bateria 100% trivialmente contra a meta de 1 dia só).
-  const targetSeconds = netTargetMinutes * 60 * filteredDevices.length * RANGE_DAY_COUNT[range];
+  // Fica em segundos de UM dispositivo só — o Gauge por pessoa e o da equipe usam essa mesma
+  // base, sem multiplicar pela contagem de dispositivos (ver TeamProductivityOverview).
+  const targetSecondsPerDevice = netTargetMinutes * 60 * RANGE_DAY_COUNT[range];
 
   // Mais recente last_seen_at entre os dispositivos no escopo filtrado — um "dado atualizado
   // até" discreto, não repete o "Visto Xmin atrás" de cada card (esse é por dispositivo).
@@ -216,19 +214,22 @@ async function DashboardData({ searchParams }: { searchParams: SearchParams }) {
         </p>
       )}
 
-      <DeviceStatusGrid devices={filteredDevices} now={now} productivity={productivity} periodLabel={periodLabel} />
-
-      <ProductivityGauge
-        productiveSeconds={productiveSeconds}
-        neutralSeconds={neutralSeconds}
-        unproductiveSeconds={unproductiveSeconds}
-        targetSeconds={targetSeconds}
+      <TeamProductivityOverview
+        devices={filteredDevices}
+        breakdown={productivityByDevice}
+        targetSecondsPerDevice={targetSecondsPerDevice}
+        now={now}
         periodLabel={periodLabel}
       />
 
-      <ActivityTimeline devices={filteredDevices} events={timelineEvents} dayStartIso={timelineDayStartIso} />
+      <PersonProductivityGrid
+        devices={filteredDevices}
+        now={now}
+        breakdown={productivityByDevice}
+        targetSecondsPerDevice={targetSecondsPerDevice}
+      />
 
-      <ProductivityBars data={productivity} targetMinutes={netTargetMinutes} />
+      <ActivityTimeline devices={filteredDevices} events={timelineEvents} dayStartIso={timelineDayStartIso} />
 
       <AppUsageChart data={byApplication} />
 

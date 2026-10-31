@@ -97,48 +97,70 @@ function aggregate(events: UsageEventRow[], keyOf: (e: UsageEventRow) => string)
     .sort((a, b) => b.seconds - a.seconds);
 }
 
-export interface DeviceProductivity {
+export interface DeviceProductivityBreakdown {
   deviceId: string;
   label: string;
-  activeSeconds: number;
-  idleSeconds: number;
+  sector: string | null;
+  productiveSeconds: number;
+  neutralSeconds: number;
+  unproductiveSeconds: number;
+  /** Evento Active mais recente do dispositivo no período — para o "Agora: ..." do card. */
+  latestActiveEvent: { applicationName: string; windowTitle: string; startedAt: string } | null;
 }
 
 /**
- * Ativo vs. inativo por dispositivo — "Não classificado" fica de fora, mesma convenção de
- * aggregateByApplication/aggregateByCategory (não é tempo de uso nem de ausência).
- * Inclui dispositivos sem nenhum evento no período (zerados), para a lista bater com o
- * grid de status.
+ * Produtivo/Neutro/Improdutivo por dispositivo (mesma classificação do Gauge da
+ * organização, ver aggregateByProductivityClass, só que quebrado por dispositivo — para o
+ * grid de cards por colaborador). Inclui dispositivos sem nenhum evento no período
+ * (zerados), para a lista bater com o grid de status.
  */
-export function aggregateActiveVsIdleByDevice(
+export function aggregateProductivityByDevice(
   events: UsageEventRow[],
-  devices: Pick<DeviceRow, "device_id" | "hostname" | "device_name">[],
-): DeviceProductivity[] {
-  const totals = new Map<string, { activeSeconds: number; idleSeconds: number }>();
+  devices: Pick<DeviceRow, "device_id" | "hostname" | "device_name" | "sector">[],
+  customRules: CustomProductivityRule[] = [],
+): DeviceProductivityBreakdown[] {
+  const totals = new Map<string, ProductivityClassTotals>();
+  const latestActive = new Map<string, UsageEventRow>();
+
   for (const device of devices) {
-    totals.set(device.device_id, { activeSeconds: 0, idleSeconds: 0 });
+    totals.set(device.device_id, { productiveSeconds: 0, neutralSeconds: 0, unproductiveSeconds: 0 });
   }
 
   for (const event of events) {
-    if (event.activity_type !== "Active" && event.activity_type !== "Idle") {
+    if (event.activity_type !== "Active") {
       continue;
     }
-    const entry = totals.get(event.device_id) ?? { activeSeconds: 0, idleSeconds: 0 };
-    if (event.activity_type === "Active") {
-      entry.activeSeconds += event.duration_seconds;
+
+    const entry = totals.get(event.device_id) ?? { productiveSeconds: 0, neutralSeconds: 0, unproductiveSeconds: 0 };
+    const key = event.application_name || event.process_name;
+    const productivityClass = classifyProductivity(key, event.window_title, customRules);
+    if (productivityClass === "productive") {
+      entry.productiveSeconds += event.duration_seconds;
+    } else if (productivityClass === "neutral") {
+      entry.neutralSeconds += event.duration_seconds;
     } else {
-      entry.idleSeconds += event.duration_seconds;
+      entry.unproductiveSeconds += event.duration_seconds;
     }
     totals.set(event.device_id, entry);
+
+    const current = latestActive.get(event.device_id);
+    if (!current || event.started_at > current.started_at) {
+      latestActive.set(event.device_id, event);
+    }
   }
 
-  return devices
-    .map((device) => ({
+  return devices.map((device) => {
+    const latest = latestActive.get(device.device_id);
+    return {
       deviceId: device.device_id,
       label: displayDeviceName(device),
-      ...(totals.get(device.device_id) ?? { activeSeconds: 0, idleSeconds: 0 }),
-    }))
-    .sort((a, b) => b.activeSeconds + b.idleSeconds - (a.activeSeconds + a.idleSeconds));
+      sector: device.sector,
+      ...(totals.get(device.device_id) ?? { productiveSeconds: 0, neutralSeconds: 0, unproductiveSeconds: 0 }),
+      latestActiveEvent: latest
+        ? { applicationName: latest.application_name, windowTitle: latest.window_title, startedAt: latest.started_at }
+        : null,
+    };
+  });
 }
 
 export interface JustifiedAbsence {

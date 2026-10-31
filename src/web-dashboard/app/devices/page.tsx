@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import { connection } from "next/server";
 import Link from "next/link";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { revokeDevice, restoreDevice, renameDevice } from "@/lib/devices/actions";
+import { revokeDevice, restoreDevice, renameDevice, updateDeviceSector } from "@/lib/devices/actions";
 import type { DeviceRow } from "@/lib/supabase/types";
 import { displayDeviceName } from "@/lib/dashboard/deviceDisplay";
 import { formatDate, formatDateTime } from "@/lib/dashboard/format";
@@ -78,6 +78,7 @@ async function DevicesData({ searchParams }: { searchParams: SearchParams }) {
           <thead>
             <tr className="border-b text-xs" style={{ color: "#898781" }}>
               <th className="py-2 pr-3 font-normal">Dispositivo</th>
+              <th className="py-2 pr-3 font-normal">Setor</th>
               <th className="py-2 pr-3 font-normal">Visto pela última vez</th>
               <th className="py-2 pr-3 font-normal">Monitorando desde</th>
               <th className="py-2 pr-3 font-normal">Status</th>
@@ -107,6 +108,26 @@ async function DevicesData({ searchParams }: { searchParams: SearchParams }) {
                       </form>
                     ) : (
                       displayDeviceName(device)
+                    )}
+                  </td>
+                  <td className="py-2 pr-3">
+                    {canManage ? (
+                      <form action={updateDeviceSector} className="flex items-center gap-1.5">
+                        <input type="hidden" name="deviceRowId" value={device.id} />
+                        <input
+                          type="text"
+                          name="sector"
+                          defaultValue={device.sector ?? ""}
+                          placeholder="Sem setor"
+                          className="w-28 rounded-md border px-2 py-1 text-sm"
+                          style={{ borderColor: "#e1e0d9" }}
+                        />
+                        <button type="submit" className="text-xs font-medium underline" style={{ color: "#52514e" }}>
+                          Salvar
+                        </button>
+                      </form>
+                    ) : (
+                      device.sector ?? "—"
                     )}
                   </td>
                   <td className="py-2 pr-3 tabular-nums" style={{ color: "#52514e" }}>

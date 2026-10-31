@@ -70,3 +70,30 @@ export async function renameDevice(formData: FormData) {
   revalidatePath("/devices");
   redirect("/devices");
 }
+
+/**
+ * Define o setor/equipe do dispositivo (texto livre, usado pelo grid de produtividade do
+ * dashboard para agrupar/filtrar) — campo em branco limpa o setor (volta a "sem setor").
+ */
+export async function updateDeviceSector(formData: FormData) {
+  const deviceRowId = String(formData.get("deviceRowId") ?? "");
+  const sector = String(formData.get("sector") ?? "").trim();
+
+  const supabase = await createSupabaseServerClient();
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) {
+    redirect("/login");
+    return;
+  }
+
+  const { error } = await supabase.from("devices").update({ sector: sector || null }).eq("id", deviceRowId);
+
+  if (error) {
+    redirect(`/devices?error=${encodeURIComponent(error.message)}`);
+    return;
+  }
+
+  revalidatePath("/devices");
+  revalidatePath("/");
+  redirect("/devices");
+}

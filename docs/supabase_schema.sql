@@ -741,3 +741,18 @@ create policy organization_logos_delete_own on storage.objects
         and (storage.foldername(name))[1] = public.current_organization_id()::text
         and public.current_organization_role() in ('owner', 'manager')
     );
+
+-- ---------------------------------------------------------------------------
+-- Migração "Setor do dispositivo".
+--
+-- Texto livre (não enum) definido manualmente em /devices (owner/manager) — usado pelo
+-- dashboard só para agrupar/filtrar o grid de produtividade por equipe (ex.: "Fiscal",
+-- "Contábil"). O agente nunca lê nem grava esta coluna (não existe no payload do /api/sync).
+--
+-- Idempotente: seguro rodar de novo num banco onde esta migração já foi aplicada.
+-- ---------------------------------------------------------------------------
+
+alter table public.devices add column if not exists sector text;
+
+comment on column public.devices.sector is
+    'Setor/equipe do dispositivo, texto livre editável em /devices (owner/manager) — usado para agrupar o grid de produtividade. Nunca escrito pelo agente.';
