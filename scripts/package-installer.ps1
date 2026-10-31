@@ -28,6 +28,19 @@ if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 
+# appsettings.Local.json é opcional e gitignorado (ver OneMonitor.Agent.csproj), mas se
+# existir na máquina que está gerando o pacote (ex.: configurado para testes locais com uma
+# API key real), o dotnet publish copia ele para a saída igual a qualquer outro Content —
+# e esse .zip é o mesmo distribuído para TODO novo cliente. Sem remover isso aqui, o
+# instalador sai com a API key de quem empacotou embutida, e qualquer organização que o
+# instalar passaria a sincronizar dados para essa mesma conta por engano. Cada instalação
+# precisa continuar exigindo sua própria configuração manual (ver appsettings.Local.json.example).
+$bundledLocalSettings = Join-Path $publishDir "appsettings.Local.json"
+if (Test-Path $bundledLocalSettings) {
+    Remove-Item $bundledLocalSettings -Force
+    Write-Host "Removido appsettings.Local.json da máquina de build do pacote publicado (não deve ir para o instalador)."
+}
+
 $distDir = Join-Path $PSScriptRoot "..\dist"
 New-Item -ItemType Directory -Force -Path $distDir | Out-Null
 $zipPath = Join-Path $distDir "OneMonitor-Agent-v$version-win-x64.zip"
