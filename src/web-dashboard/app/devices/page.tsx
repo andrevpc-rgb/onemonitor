@@ -2,10 +2,11 @@ import { Suspense } from "react";
 import { connection } from "next/server";
 import Link from "next/link";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { revokeDevice, restoreDevice, renameDevice, updateDeviceSector } from "@/lib/devices/actions";
+import { revokeDevice, restoreDevice, renameDevice, updateDeviceSector, deleteDevice } from "@/lib/devices/actions";
 import type { DeviceRow } from "@/lib/supabase/types";
 import { displayDeviceName } from "@/lib/dashboard/deviceDisplay";
 import { formatDate, formatDateTime } from "@/lib/dashboard/format";
+import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
 
 type SearchParams = Promise<{ error?: string }>;
 
@@ -147,16 +148,30 @@ async function DevicesData({ searchParams }: { searchParams: SearchParams }) {
                   </td>
                   {canManage && (
                     <td className="py-2 text-right">
-                      <form action={revoked ? restoreDevice : revokeDevice}>
-                        <input type="hidden" name="deviceRowId" value={device.id} />
-                        <button
-                          type="submit"
-                          className="text-xs font-medium underline"
-                          style={{ color: revoked ? "#006300" : "#d03b3b" }}
-                        >
-                          {revoked ? "Restaurar acesso" : "Revogar acesso"}
-                        </button>
-                      </form>
+                      <div className="flex items-center justify-end gap-3">
+                        <form action={revoked ? restoreDevice : revokeDevice}>
+                          <input type="hidden" name="deviceRowId" value={device.id} />
+                          <button
+                            type="submit"
+                            className="text-xs font-medium underline"
+                            style={{ color: revoked ? "#006300" : "#d03b3b" }}
+                          >
+                            {revoked ? "Restaurar acesso" : "Revogar acesso"}
+                          </button>
+                        </form>
+                        {revoked && (
+                          <form action={deleteDevice}>
+                            <input type="hidden" name="deviceRowId" value={device.id} />
+                            <ConfirmSubmitButton
+                              confirmMessage={`Excluir "${displayDeviceName(device)}" permanentemente? Isso apaga também todo o histórico de atividade dele. Não pode ser desfeito.`}
+                              className="text-xs font-medium underline"
+                              style={{ color: "#d03b3b" }}
+                            >
+                              Excluir permanentemente
+                            </ConfirmSubmitButton>
+                          </form>
+                        )}
+                      </div>
                     </td>
                   )}
                 </tr>

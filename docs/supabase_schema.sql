@@ -756,3 +756,36 @@ alter table public.devices add column if not exists sector text;
 
 comment on column public.devices.sector is
     'Setor/equipe do dispositivo, texto livre editável em /devices (owner/manager) — usado para agrupar o grid de produtividade. Nunca escrito pelo agente.';
+
+-- ---------------------------------------------------------------------------
+-- Migração "Exclusão definitiva de dispositivo".
+--
+-- Revogar (revoked_at) só bloqueia sync futuro — o dispositivo continuava aparecendo no
+-- dashboard e em /devices para sempre, sem forma de removê-lo de fato. Exclusão definitiva
+-- só é permitida (na UI, ver app/devices/page.tsx) para um dispositivo já revogado, e exige
+-- apagar primeiro seus usage_events (FK em devices.device_id) antes do próprio registro.
+--
+-- usage_events não tinha nenhuma policy de delete para authenticated (só service_role
+-- escrevia nela, por design — ver comentário mais acima) — abre uma exceção estreita,
+-- só para delete, restrita a owner/manager da própria organização: mesmo papel que já
+-- controla a retenção de dados em /settings (usage_events_retention_days), não é uma
+-- capacidade nova sobre o dado, só uma forma explícita de exercê-la.
+--
+-- Idempotente: seguro rodar de novo num banco onde esta migração já foi aplicada.
+-- ---------------------------------------------------------------------------
+
+drop policy if exists devices_delete_own_organization on public.devices;
+create policy devices_delete_own_organization on public.devices
+    for delete to authenticated
+    using (
+        organization_id = public.current_organization_id()
+        and public.current_organization_role() in ('owner', 'manager')
+    );
+
+drop policy if exists usage_events_delete_own_organization on public.usage_events;
+create policy usage_events_delete_own_organization on public.usage_events
+    for delete to authenticated
+    using (
+        organization_id = public.current_organization_id()
+        and public.current_organization_role() in ('owner', 'manager')
+    );

@@ -18,10 +18,9 @@ const GOAL_FRACTION = GOOD_TIER_THRESHOLD / 100;
 
 /**
  * Resumo da equipe: gauge em meia-rosca com a média de produtividade (mesma fórmula do
- * card por pessoa, ver lib/dashboard/productivity.ts) + contagem por faixa, ao lado de 3
- * indicadores rápidos (ativos/ociosos agora, horas produtivas no período). Layout espelha o
- * mockup fornecido pelo usuário; cores e geometria reaproveitam os tokens do dataviz deste
- * dashboard em vez dos valores fixos do mockup, para manter suporte a tema claro/escuro.
+ * card por pessoa, ver lib/dashboard/productivity.ts), ao lado de 3 indicadores rápidos
+ * (ativos/ociosos agora, horas produtivas no período). Cores e geometria reaproveitam os
+ * tokens do dataviz deste dashboard, para manter suporte a tema claro/escuro.
  */
 export function TeamProductivityOverview({
   devices,
@@ -42,11 +41,6 @@ export function TeamProductivityOverview({
   const avgTier = productivityTier(avg ?? 0);
   const avgColor = PRODUCTIVITY_TIER_COLOR[avgTier];
 
-  const counts = { good: 0, warning: 0, critical: 0 };
-  for (const p of present) {
-    counts[productivityTier(p)]++;
-  }
-
   const online = devices.filter((d) => deriveDeviceStatus(d, now) === "online").length;
   const away = devices.filter((d) => deriveDeviceStatus(d, now) === "away").length;
 
@@ -56,8 +50,8 @@ export function TeamProductivityOverview({
   return (
     <section aria-label="Resumo da equipe" className="viz-root flex flex-wrap gap-4">
       <div
-        className="flex flex-1 items-center gap-6 rounded-lg p-4"
-        style={{ background: "var(--viz-surface)", border: "1px solid var(--viz-gridline)", minWidth: 320 }}
+        className="flex flex-1 items-center justify-center rounded-lg p-4"
+        style={{ background: "var(--viz-surface)", border: "1px solid var(--viz-gridline)", minWidth: 280 }}
       >
         <div className="relative shrink-0" style={{ width: 240, height: 136 }}>
           <svg width={240} height={136} aria-hidden="true">
@@ -92,27 +86,6 @@ export function TeamProductivityOverview({
             >
               Média da equipe
             </div>
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-2 text-sm" style={{ color: "var(--viz-text-secondary)" }}>
-          <div className="flex items-center gap-2">
-            <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: "var(--viz-status-good)" }} aria-hidden />
-            <span>
-              <b style={{ color: "var(--viz-text-primary)" }}>{counts.good}</b> na meta ou acima ({GOOD_TIER_THRESHOLD}%+)
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: "var(--viz-status-warning)" }} aria-hidden />
-            <span>
-              <b style={{ color: "var(--viz-text-primary)" }}>{counts.warning}</b> em atenção
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: "var(--viz-status-critical)" }} aria-hidden />
-            <span>
-              <b style={{ color: "var(--viz-text-primary)" }}>{counts.critical}</b> em estado crítico
-            </span>
           </div>
         </div>
       </div>

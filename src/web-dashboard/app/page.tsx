@@ -121,9 +121,12 @@ async function DashboardData({ searchParams }: { searchParams: SearchParams }) {
 
   // Sem filtro manual por organização em nenhuma consulta abaixo: a policy de RLS de cada
   // tabela (docs/supabase_schema.sql) já restringe o resultado à organização do usuário.
+  // Dispositivo revogado some do dashboard (só continua visível em /devices, para restaurar
+  // ou excluir) — revogar sem isso só bloqueava sync futuro, o card ficava "preso" offline.
   const { data: deviceRows, error: devicesError } = await supabase
     .from("devices")
     .select("*")
+    .is("revoked_at", null)
     .order("hostname", { ascending: true });
 
   if (devicesError) {

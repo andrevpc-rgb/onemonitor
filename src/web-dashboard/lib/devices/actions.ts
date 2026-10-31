@@ -97,3 +97,53 @@ export async function updateDeviceSector(formData: FormData) {
   revalidatePath("/");
   redirect("/devices");
 }
+
+/**
+ * Exclusão definitiva — só permitida para um dispositivo já revogado (reforçado aqui, não só
+ * escondendo o botão na UI): revogar bloqueia sync futuro, mas não apaga nada; isto é
+ * irreversível, então exige o passo de revogação antes como confirmação implícita. Apaga
+ * primeiro os usage_events do dispositivo (FK em devices.device_id, ver
+ * docs/supabase_schema.sql) e só então o próprio registro.
+ */
+export async function deleteDevice(formData: FormData) {
+  const deviceRowId = String(formData.get("deviceRowId") ?? "");
+
+  const supabase = await createSupabaseServerClient();
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) {
+    redirect("/login");
+    return;
+  }
+
+  const { data: device, error: deviceError } = await supabase
+    .from("devices")
+    .select("device_id, revoked_at")
+    .eq("id", deviceRowId)
+    .single();
+
+  if (deviceError || !device) {
+    redirect(`/devices?error=${encodeURIComponent(deviceError?.message ?? "Dispositivo não encontrado.")}`);
+    return;
+  }
+
+  if (!device.revoked_at) {
+    redirect(`/devices?error=${encodeURIComponent("Revogue o acesso do dispositivo antes de excluí-lo.")}`);
+    return;
+  }
+
+  const { error: eventsError } = await supabase.from("usage_events").delete().eq("device_id", device.device_id);
+  if (eventsError) {
+    redirect(`/devices?error=${encodeURIComponent(eventsError.message)}`);
+    return;
+  }
+
+  const { error: deleteError } = await supabase.from("devices").delete().eq("id", deviceRowId);
+  if (deleteError) {
+    redirect(`/devices?error=${encodeURIComponent(deleteError.message)}`);
+    return;
+  }
+
+  revalidatePath("/devices");
+  revalidatePath("/");
+  redirect("/devices");
+}
