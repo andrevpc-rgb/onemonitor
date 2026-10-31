@@ -36,6 +36,9 @@ export async function updateOrganizationSettings(formData: FormData) {
     enable_idle_popup: formData.get("enable_idle_popup") === "on",
     popup_idle_threshold_minutes: Number(formData.get("popup_idle_threshold_minutes") ?? 0),
     usage_events_retention_days: Number(formData.get("usage_events_retention_days") ?? 0),
+    workload_alert_enabled: formData.get("workload_alert_enabled") === "on",
+    workload_alert_daily_hours_threshold: Number(formData.get("workload_alert_daily_hours_threshold") ?? 0),
+    workload_alert_consecutive_days_threshold: Number(formData.get("workload_alert_consecutive_days_threshold") ?? 0),
   };
 
   const { error } = await supabase

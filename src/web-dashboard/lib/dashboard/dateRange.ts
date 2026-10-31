@@ -28,13 +28,13 @@ export interface ResolvedDateRange {
 // uma biblioteca de fuso horário só para resolver "hoje"/"ontem" neste dashboard.
 const BRT_OFFSET_HOURS = 3;
 
-function brtCalendarDate(instant: Date): { year: number; month: number; day: number } {
+export function brtCalendarDate(instant: Date): { year: number; month: number; day: number } {
   const shifted = new Date(instant.getTime() - BRT_OFFSET_HOURS * 60 * 60 * 1000);
   return { year: shifted.getUTCFullYear(), month: shifted.getUTCMonth(), day: shifted.getUTCDate() };
 }
 
 /** Meia-noite em America/Sao_Paulo (03:00 UTC do mesmo dia civil), como instante UTC. */
-function brtMidnightUtc(year: number, month: number, day: number): Date {
+export function brtMidnightUtc(year: number, month: number, day: number): Date {
   return new Date(Date.UTC(year, month, day, BRT_OFFSET_HOURS, 0, 0));
 }
 

@@ -69,6 +69,9 @@ export interface OrganizationSettingsRow {
   enable_idle_popup: boolean;
   popup_idle_threshold_minutes: number;
   usage_events_retention_days: number;
+  workload_alert_enabled: boolean;
+  workload_alert_daily_hours_threshold: number;
+  workload_alert_consecutive_days_threshold: number;
   updated_at: string;
 }
 

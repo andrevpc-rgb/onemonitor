@@ -12,11 +12,13 @@ import {
 } from "@/lib/dashboard/aggregate";
 import { isRangeKey, resolveDateRange, RANGE_OPTIONS, RANGE_DAY_COUNT, type RangeKey } from "@/lib/dashboard/dateRange";
 import { DEFAULT_ORGANIZATION_SETTINGS, calculateNetTargetMinutes } from "@/lib/dashboard/workPolicy";
+import { detectWorkloadRisk, lastCompleteBrtDays } from "@/lib/dashboard/workloadRisk";
 import { assignCategoryColors } from "@/lib/viz/categoryColors";
 import { formatRelativeTime, formatDateTime } from "@/lib/dashboard/format";
 import { DashboardFilters } from "@/components/DashboardFilters";
 import { TeamProductivityOverview } from "@/components/TeamProductivityOverview";
 import { PersonProductivityGrid } from "@/components/PersonProductivityGrid";
+import { WorkloadRiskAlert } from "@/components/WorkloadRiskAlert";
 import { ActivityTimeline } from "@/components/ActivityTimeline";
 import { AppUsageChart } from "@/components/AppUsageChart";
 import { CategoryBreakdownChart } from "@/components/CategoryBreakdownChart";
@@ -61,6 +63,16 @@ export default function DashboardPage({ searchParams }: { searchParams: SearchPa
       </header>
 
       {/*
+        Suspense próprio (não dentro de DashboardData): o alerta de sobrecarga é
+        organização-wide, não escopado pelos filtros de período/dispositivo do resto do
+        dashboard, então busca os próprios dados de forma independente — e não deve bloquear
+        nem ser bloqueado pelo restante.
+      */}
+      <Suspense fallback={null}>
+        <WorkloadRiskSection />
+      </Suspense>
+
+      {/*
         A busca no Supabase precisa ficar num "buraco dinâmico" (Suspense) separado do
         shell estático: assim o `next build` consegue gerar a casca da página sem
         precisar de credenciais reais nem de uma sessão de usuário, e os dados só são
@@ -71,6 +83,55 @@ export default function DashboardPage({ searchParams }: { searchParams: SearchPa
       </Suspense>
     </main>
   );
+}
+
+/**
+ * Indicador de risco de sobrecarga (NR-1/GRO, ver docs/supabase_schema.sql) — olha os
+ * últimos dias de TODOS os dispositivos da organização, sem relação com os filtros de
+ * período/dispositivo do resto do dashboard (ver lib/dashboard/workloadRisk.ts).
+ */
+async function WorkloadRiskSection() {
+  await connection();
+
+  const supabase = await createSupabaseServerClient();
+
+  const { data: settingsRow } = await supabase.from("organization_settings").select("*").maybeSingle();
+  const settings = settingsRow ?? DEFAULT_ORGANIZATION_SETTINGS;
+
+  if (!settings.workload_alert_enabled) {
+    return null;
+  }
+
+  const { data: deviceRows } = await supabase.from("devices").select("*").is("revoked_at", null);
+  const devices = (deviceRows ?? []) as DeviceRow[];
+  if (devices.length === 0) {
+    return null;
+  }
+
+  const now = new Date();
+  const days = lastCompleteBrtDays(settings.workload_alert_consecutive_days_threshold, now);
+  const sinceIso = days[0]?.sinceIso ?? now.toISOString();
+  const untilIso = days[days.length - 1]?.untilIso ?? now.toISOString();
+
+  const { data: eventRows } = await supabase
+    .from("usage_events")
+    .select("*")
+    .gte("started_at", sinceIso)
+    .lt("started_at", untilIso);
+  const events = (eventRows ?? []) as UsageEventRow[];
+
+  const entries = detectWorkloadRisk(
+    events,
+    devices,
+    {
+      enabled: settings.workload_alert_enabled,
+      dailyHoursThreshold: settings.workload_alert_daily_hours_threshold,
+      consecutiveDaysThreshold: settings.workload_alert_consecutive_days_threshold,
+    },
+    now,
+  );
+
+  return <WorkloadRiskAlert entries={entries} />;
 }
 
 /**

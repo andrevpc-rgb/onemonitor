@@ -92,7 +92,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         _timer.Stop();
         try
         {
-            using var form = new JustificationPromptForm(e.Duration);
+            using var form = JustificationPromptForm.ForIdleReturn(e.Duration);
             var result = form.ShowDialog();
             if (result == DialogResult.OK && form.SelectedJustification is not null)
             {
@@ -149,20 +149,49 @@ public sealed class TrayApplicationContext : ApplicationContext
         _trayIcon.Text = TrimToolTip($"OneMonitor - {current.ProcessName}");
     }
 
+    /// <summary>
+    /// Pausar agora pede um motivo (igual ao retorno de inatividade) e grava o período como
+    /// uma ausência justificada (ver ActivityTracker.BeginManualPause) — antes, pausar não
+    /// deixava nenhum rastro em lugar nenhum (nem como inatividade), então o tempo "sumia" do
+    /// relatório sem explicação. Retomar fecha esse registro na hora (Tick síncrono), em vez
+    /// de esperar o próximo tick periódico, para a duração bater exatamente com o clique.
+    /// </summary>
     private void OnPauseResumeClicked(object? sender, EventArgs e)
     {
-        _isPaused = !_isPaused;
-
         if (_isPaused)
         {
-            _tracker.Flush();
-            _pauseResumeItem.Text = "Retomar";
-            _statusItem.Text = "Status: pausado";
-        }
-        else
-        {
+            _isPaused = false;
             _pauseResumeItem.Text = "Pausar";
+            try
+            {
+                _tracker.Tick();
+            }
+            catch (Exception ex)
+            {
+                AgentErrorLog.Record(nameof(OnPauseResumeClicked), ex);
+            }
+            return;
         }
+
+        // Pausa o polling enquanto o pop-up está aberto, mesmo padrão de OnIdleReturned —
+        // evita que um tick mude o estado do tracker por baixo do diálogo modal.
+        _timer.Stop();
+        string? justification;
+        try
+        {
+            using var form = JustificationPromptForm.ForManualPause();
+            form.ShowDialog();
+            justification = form.SelectedJustification;
+        }
+        finally
+        {
+            _timer.Start();
+        }
+
+        _tracker.BeginManualPause(justification);
+        _isPaused = true;
+        _pauseResumeItem.Text = "Retomar";
+        _statusItem.Text = "Status: pausado";
     }
 
     // Disparado pelo System.Threading.Timer numa thread do pool — nunca a thread de UI.

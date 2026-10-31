@@ -7,7 +7,7 @@ namespace OneMonitor.Agent;
 /// </summary>
 public sealed class JustificationPromptForm : Form
 {
-    private static readonly string[] PresetReasons =
+    private static readonly string[] IdleReturnReasons =
     {
         "Reunião Presencial",
         "Suporte a Colega",
@@ -16,9 +16,32 @@ public sealed class JustificationPromptForm : Form
         "Pausa"
     };
 
+    /// <summary>
+    /// Motivos para quem está prestes a pausar manualmente (ver TrayApplicationContext) — sem
+    /// "Pausa" (redundante nesse contexto, já é o que o clique significa) nem "Suporte a
+    /// Colega"/"Treinamento" (fazem mais sentido descobertos depois de já ter saído, não
+    /// escolhidos de antemão); troca por um motivo pessoal, que é o caso mais comum de pausa
+    /// deliberada que não é reunião nem visita.
+    /// </summary>
+    private static readonly string[] ManualPauseReasons =
+    {
+        "Almoço",
+        "Reunião Presencial",
+        "Visita a Cliente",
+        "Assunto Pessoal"
+    };
+
     public string? SelectedJustification { get; private set; }
 
-    public JustificationPromptForm(TimeSpan idleDuration)
+    /// <summary>Retorno de um período de inatividade já ocorrido — mostra a duração.</summary>
+    public static JustificationPromptForm ForIdleReturn(TimeSpan idleDuration) =>
+        new($"Você esteve ausente por {FormatDuration(idleDuration)}. Qual foi o motivo?", IdleReturnReasons);
+
+    /// <summary>Pausa manual que está prestes a começar (ver botão "Pausar") — motivo ainda não tem duração para mostrar.</summary>
+    public static JustificationPromptForm ForManualPause() =>
+        new("Pausando o monitoramento. Qual o motivo?", ManualPauseReasons);
+
+    private JustificationPromptForm(string message, string[] reasons)
     {
         Text = "OneMonitor - Justificar ausência";
         FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -39,16 +62,16 @@ public sealed class JustificationPromptForm : Form
             AutoSizeMode = AutoSizeMode.GrowAndShrink
         };
 
-        var message = new Label
+        var messageLabel = new Label
         {
-            Text = $"Você esteve ausente por {FormatDuration(idleDuration)}. Qual foi o motivo?",
+            Text = message,
             AutoSize = true,
             MaximumSize = new Size(260, 0),
             Margin = new Padding(0, 0, 0, 12)
         };
-        layout.Controls.Add(message);
+        layout.Controls.Add(messageLabel);
 
-        foreach (var reason in PresetReasons)
+        foreach (var reason in reasons)
         {
             var button = new Button
             {

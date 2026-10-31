@@ -296,6 +296,70 @@ async function SettingsData({ searchParams }: { searchParams: SearchParams }) {
           </p>
         </div>
 
+        <div className="space-y-4 border-t pt-4" style={{ borderColor: "#e1e0d9" }}>
+          <div>
+            <h3 className="text-sm font-semibold">Risco de sobrecarga de trabalho (NR-1 / GRO)</h3>
+            <p className="mt-1 text-xs" style={{ color: "#898781" }}>
+              A NR-1 exige que o gerenciamento de riscos ocupacionais (GRO/PGR) considere
+              riscos psicossociais, como carga horária excessiva — mas não fixa um número de
+              horas: cabe a cada organização definir o próprio critério. Os valores abaixo são
+              esse critério; ajuste para o que fizer sentido na sua operação.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <input
+              id="workload_alert_enabled"
+              name="workload_alert_enabled"
+              type="checkbox"
+              disabled={!canEdit}
+              defaultChecked={settings.workload_alert_enabled}
+              className="h-4 w-4"
+            />
+            <label htmlFor="workload_alert_enabled" className="text-sm font-medium">
+              Exibir alerta de sobrecarga no dashboard
+            </label>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label htmlFor="workload_alert_daily_hours_threshold" className="text-sm font-medium">
+                Horas ativas/dia consideradas elevadas
+              </label>
+              <input
+                id="workload_alert_daily_hours_threshold"
+                name="workload_alert_daily_hours_threshold"
+                type="number"
+                min={0.1}
+                step={0.1}
+                required
+                disabled={!canEdit}
+                defaultValue={settings.workload_alert_daily_hours_threshold}
+                className={inputClass}
+              />
+            </div>
+            <div className="space-y-1">
+              <label htmlFor="workload_alert_consecutive_days_threshold" className="text-sm font-medium">
+                Dias consecutivos para alertar
+              </label>
+              <input
+                id="workload_alert_consecutive_days_threshold"
+                name="workload_alert_consecutive_days_threshold"
+                type="number"
+                min={1}
+                required
+                disabled={!canEdit}
+                defaultValue={settings.workload_alert_consecutive_days_threshold}
+                className={inputClass}
+              />
+            </div>
+          </div>
+          <p className="text-xs" style={{ color: "#898781" }}>
+            Dispara quando um dispositivo fica acima do limiar de horas em todos os últimos N
+            dias (dias sem nenhuma atividade não contam — isso reinicia a contagem).
+          </p>
+        </div>
+
         {canEdit && (
           <button
             type="submit"

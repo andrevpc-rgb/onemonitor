@@ -789,3 +789,43 @@ create policy usage_events_delete_own_organization on public.usage_events
         organization_id = public.current_organization_id()
         and public.current_organization_role() in ('owner', 'manager')
     );
+
+-- ---------------------------------------------------------------------------
+-- Migração "Alerta de risco de sobrecarga de trabalho (NR-1 / GRO)".
+--
+-- A NR-1 (Portaria MTE nº 1.419/2024) passou a exigir que o Gerenciamento de Riscos
+-- Ocupacionais (GRO/PGR) inclua riscos psicossociais — carga horária excessiva e
+-- intensificação do trabalho entre eles. A norma não define um número fixo de horas: pede que
+-- cada organização mapeie e gerencie seus próprios riscos. Por isso os limiares aqui são
+-- configuráveis em /settings (owner/manager), não um valor fixo no código — ver
+-- lib/dashboard/workloadRisk.ts, que calcula o indicador a partir deles, e
+-- components/WorkloadRiskAlert.tsx, que o exibe no dashboard.
+--
+-- workload_alert_daily_hours_threshold é numeric (não integer): permite frações de hora
+-- (ex.: 8.8). O default (10h) é o limite legal diário da CLT já incluindo prorrogação (Art.
+-- 59, §2º) — um teto razoável para começar, não uma recomendação normativa.
+--
+-- Idempotente: seguro rodar de novo num banco onde esta migração já foi aplicada.
+-- ---------------------------------------------------------------------------
+
+alter table public.organization_settings
+    add column if not exists workload_alert_enabled boolean not null default false;
+alter table public.organization_settings
+    add column if not exists workload_alert_daily_hours_threshold numeric not null default 10;
+alter table public.organization_settings
+    add column if not exists workload_alert_consecutive_days_threshold integer not null default 3;
+
+alter table public.organization_settings drop constraint if exists organization_settings_workload_hours_check;
+alter table public.organization_settings
+    add constraint organization_settings_workload_hours_check check (workload_alert_daily_hours_threshold > 0);
+
+alter table public.organization_settings drop constraint if exists organization_settings_workload_days_check;
+alter table public.organization_settings
+    add constraint organization_settings_workload_days_check check (workload_alert_consecutive_days_threshold > 0);
+
+comment on column public.organization_settings.workload_alert_enabled is
+    'Liga/desliga o indicador de risco de sobrecarga (NR-1/GRO) no dashboard — ver WorkloadRiskAlert.tsx.';
+comment on column public.organization_settings.workload_alert_daily_hours_threshold is
+    'Horas ativas por dia a partir das quais um dia conta como "sobrecarregado" — critério definido pela organização, a NR-1 não fixa um número.';
+comment on column public.organization_settings.workload_alert_consecutive_days_threshold is
+    'Quantos dias consecutivos acima do limiar disparam o alerta.';

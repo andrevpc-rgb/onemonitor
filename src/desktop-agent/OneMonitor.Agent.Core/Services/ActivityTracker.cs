@@ -45,10 +45,16 @@ public class ActivityTracker
     /// </summary>
     public IWorkPolicyProvider WorkPolicyProvider => _workPolicyProvider;
 
+    /// <summary>Nome de processo marcador para um registro aberto por <see cref="BeginManualPause"/> — distinto de "(idle)" para nunca se fundir com um período de inatividade detectado automaticamente (ver regra de fusão em SqliteActivityRepository).</summary>
+    public const string ManualPauseProcessName = "(pausa manual)";
+
     /// <summary>
     /// Disparado quando a atividade sai de Idle para qualquer outro tipo (usuário voltou de
     /// um período de inatividade). Não dispara a partir de <see cref="Flush"/> — pausar ou
     /// encerrar o monitoramento não deve interromper o usuário com um pedido de justificativa.
+    /// Também não dispara quando o registro Idle encerrado já tem uma justificativa (ver
+    /// <see cref="BeginManualPause"/>) — perguntar de novo "qual foi o motivo" sobre algo que
+    /// o próprio usuário acabou de explicar, ao clicar em Pausar, seria redundante.
     /// </summary>
     public event EventHandler<IdleReturnedEventArgs>? IdleReturned;
 
@@ -122,7 +128,7 @@ public class ActivityTracker
             _openRecord = CreateRecord(type, processName, windowTitle, now);
             RaiseIfUnproductive(_openRecord);
 
-            if (closedRecord.Type == ActivityType.Idle && type != ActivityType.Idle)
+            if (closedRecord.Type == ActivityType.Idle && type != ActivityType.Idle && closedRecord.Justification is null)
             {
                 IdleReturned?.Invoke(this, new IdleReturnedEventArgs(closedRecordId, closedRecord.StartTime, closedRecord.EndTime));
             }
@@ -144,6 +150,24 @@ public class ActivityTracker
         _openRecord.EndTime = _clock.UtcNow;
         _repository.SaveClosedRecord(_openRecord);
         _openRecord = null;
+    }
+
+    /// <summary>
+    /// Pausa manual (botão "Pausar" na bandeja, ver TrayApplicationContext) — fecha o que
+    /// estava aberto e abre um registro Idle com o motivo já anexado na hora, em vez de deixar
+    /// a pausa completamente invisível (sem registro nenhum, nem em "ausências justificadas")
+    /// como acontecia antes. <paramref name="justification"/> pode ser null (usuário optou por
+    /// não informar motivo) — mesmo assim o período fica registrado como Idle, só sem texto.
+    /// O próximo <see cref="Tick"/> que sair desse Idle fecha o registro normalmente; como ele
+    /// já tem Justification preenchida (quando houver), IdleReturned não dispara de novo.
+    /// </summary>
+    public void BeginManualPause(string? justification)
+    {
+        Flush();
+
+        var now = _clock.UtcNow;
+        _openRecord = CreateRecord(ActivityType.Idle, ManualPauseProcessName, string.Empty, now);
+        _openRecord.Justification = justification;
     }
 
     /// <summary>
